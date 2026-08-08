@@ -1,6 +1,6 @@
 # NT8 Kat 34 Scalper — EMA 34/89 Rejection Signal Indicator
 
-**Current Version**: `v0.98` (Released: `2026-08-08`)
+**Current Version**: `v0.99` (Released: `2026-08-08`)
 
 Signal indicator for **NinjaTrader 8 (NT8)**: draws Sell/Buy signals on the chart with entry, SL and TP dash lines. Appears under the **KAT** folder when adding to a chart.
 
@@ -89,7 +89,7 @@ All signal math runs on the primary series of the chart the indicator is added t
 
 ## HUD
 TradeManager pixel-perfect panel (HudGap 2, HudPanelWidth 250 → inner 238, UseLayoutRounding): dark navy card `Argb(240,20,24,33)` on draggable canvas (clamped 40px visible), `⚡ KAT 34-ScalperBot vX.XX` header, status line (5 s auto-clear) mirrors bot events.
-- **ACCOUNT** (top black board, TradeManager style): `Monday 04, Aug   02:34:56 pm (NYT)` purple/orange 11px, `Acct: Sim101 • MNQ` 11px, `Balance: $N0`, `Day: +N0` (daily PnL green/red from NY 18:00 session), `U: +N0 | R: +N0` 2-col grid, `Bots: BOT ON/OFF  B1 ON/OFF  B2 ON/OFF  Flat/Long 1/Short 1/PENDING B1 Buy` 10px SemiBold (ON green #28C850 / B1/B2 dark-blue #0F3C82, OFF gray). Updates every 500 ms via watchdog.
+- **ACCOUNT** (top black board, TradeManager style): `Monday 04, Aug   02:34:56 pm (NYT)` purple/orange 11px, `Acct: Sim101 • MNQ` 11px, `Balance: $N0`, `Day: +N0` (daily PnL green/red from NY 18:00 session), `U: +N0 | R: +N0` 2-col grid, `Bots: BOT ON/OFF  A2 ON/OFF  B1 ON/OFF  B2 ON/OFF  Flat/Long 1/Short 1/PENDING B1 Buy` 10px SemiBold (BOT green #28C850 / A2 blue #007ACC / B1/B2 dark-blue #0F3C82, OFF gray). Updates every 500 ms via watchdog.
 - **BOT**: account dropdown (syncs ChartTrader), ATM template dropdown (sorted, `None` = bare order), 6 ATM quick-set buttons (amber ON), `⚡ BOT: ON/OFF` (OFF cancels pending), `SELL/BUY MARKET` 43px, `Revert` / `Break Even` 43px, `Close/flatten` 59px, `Max DD` / `Max Profit` purple toggles (2-col span).
 - **ALERT SIGNAL**: `A2` placeholder toggle.
 - **BOT SIGNAL**: `B1 (34bounce8+)` + `B2 (89uturn34)` dark-blue ON (`#0F3C82`).

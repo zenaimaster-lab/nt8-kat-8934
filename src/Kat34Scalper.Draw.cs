@@ -5,6 +5,7 @@
  * HUD sections are titled by the module they control: ACCOUNT / BOT / SIGNAL / FILTER / DRAW.
  * Redesign v0.95: full TradeManager pixel-perfect port (HudGap 2, HudPanelWidth 250→238 inner, UseLayoutRounding, templates)
  * v0.98: ACCOUNT top black board (NYT time, acct/balance/Day/U/R, BOT/B1/B2/POS) — TradeManager AccountInfo port
+ * v0.99: ACCOUNT add A2 + Daily stale fix
  */
 
 #region Using declarations
@@ -1115,10 +1116,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			accountBotLabelRun = null;
 			accountBotValueRun = null;
 			accountBotSep1 = null;
-			accountB1Run = null;
+			accountA2Run = null;
 			accountBotSep2 = null;
-			accountB2Run = null;
+			accountB1Run = null;
 			accountBotSep3 = null;
+			accountB2Run = null;
+			accountBotSep4 = null;
 			accountPosRun = null;
 		}
 		#endregion

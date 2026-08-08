@@ -29,6 +29,13 @@ graph TD
 ---
 
 ## 📜 Version History & Change Log
+### [v0.99] — 2026-08-08
+- **Re-audit ACCOUNT section — fix + polish**:
+  - **Fix Daily stale**: `AccountInfo.cs:313` `dailyOk==false` trước giữ giá trị cũ → nay set `"--"` gray; `catch` cũng set `"--"` (không để số cũ lệch phiên).
+  - **Thêm A2 vào header**: `Bots:` line thêm `A2 ON/OFF` (blue `hudOnBrush #007ACC` khi ON, gray OFF) giữa `BOT` và `B1` → `Bots: BOT ON  A2 OFF  B1 ON  B2 OFF  Flat/...` 10px SemiBold, `TextTrimming.Ellipsis` an toàn 250px. Cập nhật `CreateAccountInfoSection` thêm `accountA2Run` + `accountBotSep4`, `UpdateAccountInfoSection` đọc `cachedAlertA2`, `RemoveHud` clear `accountA2Run/ Sep4`.
+  - **README**: `HUD ACCOUNT` bullet cập nhật `A2` trong Bots line.
+  - Verify: `Run-AllChecks` 3 steps 124 tests 0 warn ALL GREEN; `CompileCheck` net48 0 errors; `graphify update` 798→...
+  - Graphify mapping: `Kat34Scalper.AccountInfo:accountA2Run` (A2 header), `Kat34Scalper.Draw:RemoveHud` (A2 clear).
 ### [v0.98] — 2026-08-08
 - **ACCOUNT section — TradeManager-style header (tài khoản/thời gian/chỉ số bot)**:
   - New `src/Kat34Scalper.AccountInfo.cs` (partial class): top black board ported từ `KatTradeManager.AccountInfo.cs` — `HudGap 2`, `HudPanelWidth 250→238 inner`, `UseLayoutRounding/Snaps` trên mọi Border/StackPanel/Grid, card `Background #000000 Border #232A38 CornerRadius 5 Margin 0,0,0,HudGap` + footer 10px đen (TradeManager pattern), không dùng title riêng.

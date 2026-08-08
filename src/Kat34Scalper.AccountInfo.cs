@@ -45,10 +45,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private Run accountBotLabelRun;
 		private Run accountBotValueRun;
 		private Run accountBotSep1;
-		private Run accountB1Run;
+		private Run accountA2Run;
 		private Run accountBotSep2;
-		private Run accountB2Run;
+		private Run accountB1Run;
 		private Run accountBotSep3;
+		private Run accountB2Run;
+		private Run accountBotSep4;
 		private Run accountPosRun;
 
 		private readonly SolidColorBrush accountDateBrush = CreateFrozenBrush(Color.FromRgb(180, 100, 255));
@@ -175,10 +177,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			accountBotLabelRun = new Run("Bots: ") { Foreground = accountGrayBrush };
 			accountBotValueRun = new Run("BOT OFF") { Foreground = accountGrayBrush };
 			accountBotSep1 = new Run("  ") { Foreground = accountGrayBrush };
-			accountB1Run = new Run("B1 OFF") { Foreground = accountGrayBrush };
+			accountA2Run = new Run("A2 OFF") { Foreground = accountGrayBrush };
 			accountBotSep2 = new Run("  ") { Foreground = accountGrayBrush };
-			accountB2Run = new Run("B2 OFF") { Foreground = accountGrayBrush };
+			accountB1Run = new Run("B1 OFF") { Foreground = accountGrayBrush };
 			accountBotSep3 = new Run("  ") { Foreground = accountGrayBrush };
+			accountB2Run = new Run("B2 OFF") { Foreground = accountGrayBrush };
+			accountBotSep4 = new Run("  ") { Foreground = accountGrayBrush };
 			accountPosRun = new Run("") { Foreground = accountGrayBrush };
 			accountBotText = new TextBlock
 			{
@@ -194,10 +198,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			accountBotText.Inlines.Add(accountBotLabelRun);
 			accountBotText.Inlines.Add(accountBotValueRun);
 			accountBotText.Inlines.Add(accountBotSep1);
-			accountBotText.Inlines.Add(accountB1Run);
+			accountBotText.Inlines.Add(accountA2Run);
 			accountBotText.Inlines.Add(accountBotSep2);
-			accountBotText.Inlines.Add(accountB2Run);
+			accountBotText.Inlines.Add(accountB1Run);
 			accountBotText.Inlines.Add(accountBotSep3);
+			accountBotText.Inlines.Add(accountB2Run);
+			accountBotText.Inlines.Add(accountBotSep4);
 			accountBotText.Inlines.Add(accountPosRun);
 			inner.Children.Add(accountBotText);
 
@@ -321,8 +327,16 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 						if (accountDailyValueRun.Text != dStr) accountDailyValueRun.Text = dStr;
 						accountDailyValueRun.Foreground = dBrush;
 					}
+					else
+					{
+						if (accountDailyValueRun.Text != "--") accountDailyValueRun.Text = "--";
+						accountDailyValueRun.Foreground = accountGrayBrush;
+					}
 				}
-				catch { }
+				catch
+				{
+					try { if (accountDailyValueRun.Text != "--") accountDailyValueRun.Text = "--"; accountDailyValueRun.Foreground = accountGrayBrush; } catch { }
+				}
 				try
 				{
 					string uStr; Brush uBrush;
@@ -348,12 +362,18 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			try
 			{
 				bool botOn = false; try { botOn = cachedBotOn && BotEnabled; } catch { botOn = cachedBotOn; }
+				bool a2On = false; try { a2On = cachedAlertA2; } catch { }
 				bool b1On = false; try { b1On = cachedB1; } catch { }
 				bool b2On = false; try { b2On = cachedB2; } catch { }
 				string botTxt = botOn ? "BOT ON" : "BOT OFF";
 				Brush botBrush = botOn ? botOnBrush2 : accountGrayBrush;
 				if (accountBotValueRun.Text != botTxt) accountBotValueRun.Text = botTxt;
 				accountBotValueRun.Foreground = botBrush;
+
+				string a2Txt = a2On ? "A2 ON" : "A2 OFF";
+				Brush a2Brush = a2On ? hudOnBrush : accountGrayBrush;
+				if (accountA2Run.Text != a2Txt) accountA2Run.Text = a2Txt;
+				accountA2Run.Foreground = a2Brush;
 
 				string b1Txt = b1On ? "B1 ON" : "B1 OFF";
 				Brush b1Brush = b1On ? bOnBrush : accountGrayBrush;
