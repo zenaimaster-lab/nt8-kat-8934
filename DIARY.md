@@ -29,6 +29,14 @@ graph TD
 ---
 
 ## 📜 Version History & Change Log
+### [v0.98] — 2026-08-08
+- **ACCOUNT section — TradeManager-style header (tài khoản/thời gian/chỉ số bot)**:
+  - New `src/Kat34Scalper.AccountInfo.cs` (partial class): top black board ported từ `KatTradeManager.AccountInfo.cs` — `HudGap 2`, `HudPanelWidth 250→238 inner`, `UseLayoutRounding/Snaps` trên mọi Border/StackPanel/Grid, card `Background #000000 Border #232A38 CornerRadius 5 Margin 0,0,0,HudGap` + footer 10px đen (TradeManager pattern), không dùng title riêng.
+  - Nội dung 6 dòng: **NYT time** (`GetNyTime` EST→America/New_York fallback, date purple #B464FF, time orange #FFA500, 11px `dddd dd, MMM   hh:mm:ss pm (NYT)`), **Acct** (`Sim101 • MNQ` 11px ellipsis), **Balance** (`Balance: $N0` gray), **Day** (`Day: +N0` green/red/gray từ `CalculateDailyPnL`), **U/R grid** 2-col `U: +N0 | R: +N0` (11px, green/red), **Bots** (`Bots: BOT ON/OFF  B1 ON/OFF  B2 ON/OFF  Flat/Long 1/Short 1/PENDING B1 Buy` 10px SemiBold, ON green #28C850 / B1/B2 ON dark-blue #0F3C82, OFF gray #A0A0A0).
+  - `BuildHud` chèn `CreateAccountInfoSection()` ngay sau header `⚡ KAT 34-ScalperBot` (trước status), `OnPanelWatchdogTick` gọi `UpdateAccountInfoSection()` mỗi 500ms + immediate sau `BOT ON/OFF`, `accSelector SelectionChanged`, `B1/B2/A2 Click`. `RemoveHud` clear toàn bộ Runs/TextBlocks.
+  - Style khớp TradeManager: inner Padding `HudGap, HudGap+4`, height uniform, `TextBlock` `UseLayoutRounding true`, balance fallback `CashValue→TotalCashBalance→NetLiquidation`, PnL coloring ngưỡng 0.005, `N0` invariant.
+  - Verify: `Run-AllChecks` 3 steps 124 tests 0 warn ALL GREEN; `CompileCheck` net48 0 errors.
+  - Graphify mapping: `Kat34Scalper.AccountInfo:CreateAccountInfoSection/UpdateAccountInfoSection/GetNyTime`, `Kat34Scalper.Draw:BuildHud/OnPanelWatchdogTick/RemoveHud` (account wiring).
 ### [v0.97] — 2026-08-08
 - **Re-audit lần 2 — polish dead code + mermaid + NY safety + CI**:
   - `Bot.AtmMerge.cs:27` xóa write-only `atmMergePosition/StopQuantity/TargetQuantity` (chỉ set không read).

@@ -1,6 +1,6 @@
 # NT8 Kat 34 Scalper — EMA 34/89 Rejection Signal Indicator
 
-**Current Version**: `v0.97` (Released: `2026-08-08`)
+**Current Version**: `v0.98` (Released: `2026-08-08`)
 
 Signal indicator for **NinjaTrader 8 (NT8)**: draws Sell/Buy signals on the chart with entry, SL and TP dash lines. Appears under the **KAT** folder when adding to a chart.
 
@@ -22,6 +22,7 @@ Signal indicator for **NinjaTrader 8 (NT8)**: draws Sell/Buy signals on the char
 | `src/Kat34Scalper.Bot.AtmMerge.cs` | **Bot.AtmMerge** | ATM bracket MERGE reconciliation (anchor resize, duplicate/stale cancel, flat cleanup grace) |
 | `src/Kat34Scalper.Draw.cs` | **Draw** | entry/SL/TP + ATM trigger lines, labels, alert sound, HUD assembly |
 | `src/Kat34Scalper.Draw.HudFactory.cs` | **Draw.HudFactory** | TradeManager pixel-perfect factory: buttons, grids, cards, templates (HudGap 2, width 250→238) |
+| `src/Kat34Scalper.AccountInfo.cs` | **Draw.AccountInfo** | TradeManager-style top black board: NYT time, acct/balance/Day/U/R, bot indicators (BOT/B1/B2/POS) |
 | `../nt8-kat-StackEMA/nt8-kat-StackEMA.cs` | **Standalone StackEMA** | independent sibling repo (no submodule): `nt8-kat-StackEMA` indicator - five configurable timeframe packs, EMA 8/21/34/55/89, top-left status HUD |
 | `../nt8-kat-StackEMA/StackEmaLogic.cs` | **StackEMA pure logic** | independent sibling repo: Positive/Negative/Neutral direction, closed-bar MTF mapping, Scalper filter rule |
 | `src/Kat34Scalper.StackEMA.cs` | **StackEMA filter adapter** | mapped secondary series (reuses ADX MTF series when periods match) and directional bot filter |
@@ -88,6 +89,7 @@ All signal math runs on the primary series of the chart the indicator is added t
 
 ## HUD
 TradeManager pixel-perfect panel (HudGap 2, HudPanelWidth 250 → inner 238, UseLayoutRounding): dark navy card `Argb(240,20,24,33)` on draggable canvas (clamped 40px visible), `⚡ KAT 34-ScalperBot vX.XX` header, status line (5 s auto-clear) mirrors bot events.
+- **ACCOUNT** (top black board, TradeManager style): `Monday 04, Aug   02:34:56 pm (NYT)` purple/orange 11px, `Acct: Sim101 • MNQ` 11px, `Balance: $N0`, `Day: +N0` (daily PnL green/red from NY 18:00 session), `U: +N0 | R: +N0` 2-col grid, `Bots: BOT ON/OFF  B1 ON/OFF  B2 ON/OFF  Flat/Long 1/Short 1/PENDING B1 Buy` 10px SemiBold (ON green #28C850 / B1/B2 dark-blue #0F3C82, OFF gray). Updates every 500 ms via watchdog.
 - **BOT**: account dropdown (syncs ChartTrader), ATM template dropdown (sorted, `None` = bare order), 6 ATM quick-set buttons (amber ON), `⚡ BOT: ON/OFF` (OFF cancels pending), `SELL/BUY MARKET` 43px, `Revert` / `Break Even` 43px, `Close/flatten` 59px, `Max DD` / `Max Profit` purple toggles (2-col span).
 - **ALERT SIGNAL**: `A2` placeholder toggle.
 - **BOT SIGNAL**: `B1 (34bounce8+)` + `B2 (89uturn34)` dark-blue ON (`#0F3C82`).

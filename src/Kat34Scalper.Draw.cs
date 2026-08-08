@@ -2,8 +2,9 @@
  * Kat34Scalper.Draw.cs — Draw module (partial class Kat34Scalper).
  * Everything visual: signal drawings (entry/SL/TP + ATM BE/SL1/SL2 trigger lines,
  * arrows, labels), the version/timeframe label, alert sounds, and the HUD panel.
- * HUD sections are titled by the module they control: SIGNAL / FILTER / BOT / DRAW.
+ * HUD sections are titled by the module they control: ACCOUNT / BOT / SIGNAL / FILTER / DRAW.
  * Redesign v0.95: full TradeManager pixel-perfect port (HudGap 2, HudPanelWidth 250→238 inner, UseLayoutRounding, templates)
+ * v0.98: ACCOUNT top black board (NYT time, acct/balance/Day/U/R, BOT/B1/B2/POS) — TradeManager AccountInfo port
  */
 
 #region Using declarations
@@ -623,6 +624,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				SnapsToDevicePixels = true
 			});
 
+			mainPanel.Children.Add(CreateAccountInfoSection());
+
 			hudStatusText = new TextBlock
 			{
 				Background = Brushes.Transparent,
@@ -690,6 +693,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				cachedBotAccountName = accCombo.SelectedItem.ToString();
 				BotAccountName = cachedBotAccountName;
 				SyncChartTraderAccount(cachedBotAccountName);
+				try { UpdateAccountInfoSection(); } catch { }
 			};
 			secBot.Children.Add(accCombo);
 
@@ -775,6 +779,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				btnBot.Background = cachedBotOn ? hudOnBrush : hudOffBrush;
 				btnBot.Foreground = cachedBotOn ? Brushes.White : Brushes.LightGray;
 				if (btnBot.Content is TextBlock tb2) tb2.Foreground = btnBot.Foreground;
+				try { UpdateAccountInfoSection(); } catch { }
 				if (cachedBotOn)
 					ShowHudStatus("BOT ON — every signal switched ON auto-submits entries", Brushes.LightGreen);
 				else
@@ -879,6 +884,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			mainPanel.Children.Add(CreateModuleTitle("ALERT SIGNAL"));
 			var secAlert = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
 			Button btnAlertA2 = CreateFilterToggle("A2", () => cachedAlertA2, v => SetAlertA2Signal(v));
+			btnAlertA2.Click += (s, e) => { try { UpdateAccountInfoSection(); } catch { } };
 			// single toggle full-width: wrap in grid with single star centered? Use full-width button directly
 			// For pixel parity with 2-col cards, use 6-col base with Span11 full-width
 			Grid aGrid = CreateTwoColumnGrid(0, HudGap);
@@ -891,9 +897,11 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			var secSignal = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
 			Grid sRow = CreateTwoColumnGrid(0, HudGap);
 			Button btnB1 = CreateFilterToggle("B1 (34bounce8+)", () => cachedB1, v => SetB1Signal(v), 24, 10, hudBotOnBrush);
+			btnB1.Click += (s, e) => { try { UpdateAccountInfoSection(); } catch { } };
 			Grid.SetColumn(btnB1, 0);
 			sRow.Children.Add(btnB1);
 			Button btnB2 = CreateFilterToggle("B2 (89uturn34)", () => cachedB2, v => SetB2Signal(v), 24, 10, hudBotOnBrush);
+			btnB2.Click += (s, e) => { try { UpdateAccountInfoSection(); } catch { } };
 			Grid.SetColumn(btnB2, 2);
 			sRow.Children.Add(btnB2);
 			secSignal.Children.Add(sRow);
@@ -1053,6 +1061,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				EvaluateDailyRiskLimits();
 				TrySubmitPendingRevert();
 				ScheduleAtmBracketMerge();
+				try { UpdateAccountInfoSection(); } catch (Exception ex) { Print(string.Format("[Kat34Scalper] Watchdog UpdateAccountInfoSection: {0}", ex.Message)); }
 			}
 			catch (Exception ex)
 			{
@@ -1080,6 +1089,37 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			hudStatusText = null;
 			atmComboBox = null;
 			atmSetButtons = null;
+			accountInfoCard = null;
+			accountInfoDateTimeText = null;
+			accountDateRun = null;
+			accountTimeHmRun = null;
+			accountTimeSRun = null;
+			accountAmPmRun = null;
+			accountNytRun = null;
+			accountBalanceText = null;
+			accountBalanceLabelRun = null;
+			accountBalanceValueRun = null;
+			accountUnrealText = null;
+			accountRealText = null;
+			accountUnrealLabelRun = null;
+			accountUnrealValueRun = null;
+			accountRealLabelRun = null;
+			accountRealValueRun = null;
+			accountDailyText = null;
+			accountDailyLabelRun = null;
+			accountDailyValueRun = null;
+			accountAcctText = null;
+			accountAcctLabelRun = null;
+			accountAcctValueRun = null;
+			accountBotText = null;
+			accountBotLabelRun = null;
+			accountBotValueRun = null;
+			accountBotSep1 = null;
+			accountB1Run = null;
+			accountBotSep2 = null;
+			accountB2Run = null;
+			accountBotSep3 = null;
+			accountPosRun = null;
 		}
 		#endregion
 	}
