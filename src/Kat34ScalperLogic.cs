@@ -134,6 +134,7 @@ namespace Kat34Scalper
 		}
 
 		/// <summary>Market filter: ADX strength + relative volume. volumeSma 0 disables the volume leg.</summary>
+		// ponytail: orphan prod after Filter volume-only inline (v0.96) — kept for xunit Market_* tests; remove if tests move to Filter helper
 		public static bool PassMarketFilter(double adx, double adxMin, double volume, double volumeSma, double volumeMult)
 		{
 			if (adx < adxMin) return false;
@@ -286,6 +287,7 @@ namespace Kat34Scalper
 		}
 
 		/// <summary>
+		// ponytail: A1 legacy — host no longer compiles A1 (sibling nt8-kat-A1-TradeBackground owns it). Kept for xunit A1Direction/A1Edge tests; delete if sibling covers
 		/// A1 (fan) — normalized EMA slope in degrees: slope per bar (price units) divided by the
 		/// normalization unit (the price-per-bar move that reads as 45 degrees), then atan. Rising
 		/// EMA yields positive degrees, falling negative. Zoom-independent and backfillable.

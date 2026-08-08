@@ -24,9 +24,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 
 		private Order atmMergeStopAnchor;
 		private Order atmMergeTargetAnchor;
-		private MarketPosition atmMergePosition = MarketPosition.Flat;
-		private int atmMergeStopQuantity;
-		private int atmMergeTargetQuantity;
 		private int atmMergeScheduled;
 
 		private static bool SameOrder(Order left, Order right)
@@ -150,9 +147,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			{
 				atmMergeStopAnchor = null;
 				atmMergeTargetAnchor = null;
-				atmMergeStopQuantity = 0;
-				atmMergeTargetQuantity = 0;
-				atmMergePosition = MarketPosition.Flat;
 				atmStartupOrder = null;
 				atmLastLifecycleActivityUtc = DateTime.MinValue;
 				atmPositionWasConfirmedThisEpisode = false;
@@ -290,11 +284,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					targetAnchor = atmMergeTargetAnchor != null && targets.Contains(atmMergeTargetAnchor)
 						? atmMergeTargetAnchor
 						: targets.FirstOrDefault();
-					atmMergePosition = position.MarketPosition;
 					atmMergeStopAnchor = stopAnchor;
 					atmMergeTargetAnchor = targetAnchor;
-					atmMergeStopQuantity = position.Quantity;
-					atmMergeTargetQuantity = position.Quantity;
 				}
 
 				List<Order> changes = new List<Order>();

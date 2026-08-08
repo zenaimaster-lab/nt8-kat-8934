@@ -4,21 +4,41 @@
 
 ```mermaid
 graph TD
-    A[NinjaTrader 8 Chart] --> B[Kat8934 Indicator]
-    B --> C[Kat8934Logic pure state machine]
-    B --> D[EMA Fast 34 / EMA Slow 89]
-    B --> E[Signal drawing: text, arrow, Entry/SL/TP dash lines]
+    A[NinjaTrader 8 Chart] --> B[Kat34Scalper KAT]
+    B --> C[Kat34ScalperLogic pure B2 seq + B1 bounce + Filter math]
+    B --> D[EMA 34/89 + 8/144/200]
+    B --> E[Filter BOT: ADXrise/ADXmtf/ER/CI/Vol/Time/StackEMA]
+    B --> F[Bot Signal B1 34bounce8+]
+    B --> G[Bot Signal B2 89uturn34]
+    B --> H[Alert A2 placeholder]
+    B --> I[Bot semi-auto + ATM MERGE]
+    B --> J[Draw + HUD TradeManager]
+    K[StackEMA sibling] --> E
+    L[A1 TradeBackground sibling] -. independent .-> A
 ```
 
 ### Key Entities & Dependencies
-- **Component**: `Kat8934` (NinjaTrader Indicator)
-- **Domain Logic**: `Kat8934Logic` (pure state machine — touch EMA89 → U-turn close through EMA34 → trigger)
-- **Execution Target**: NT8 chart (bip 0 only), `Calculate.OnBarClose`
-- **Settings sections**: `1. Chuẩn bị` (reserved), `2. Sell Signal`, `3. Buy Signal`
+- **Component**: `Kat34Scalper` (NinjaTrader Indicator, partial 13 files)
+- **Domain Logic**: `Kat34ScalperLogic` (B2 seq `Update`, B1 bounce `UpdateA2`, Filter `EfficiencyRatio/ChoppinessIndex`, ATM parser)
+- **Signals**: `B1 34bounce8+` (KatA2State), `B2 89uturn34` (KatA1State), `A1` lives in sibling `nt8-kat-A1-TradeBackground`, `A2` placeholder
+- **Filter**: BOT only — `Filter.MarketPassAt/ErPassAt/CiPassAt/AdxMtfPassAt/StackEmaFilterPassAt`
+- **Bot**: `Bot` (order), `Bot.Risk` (NY 18:00 session), `Bot.AtmMerge` (MERGE)
+- **Draw**: `Draw` (RenderSignal) + `Draw.HudFactory` (TradeManager tokens)
+- **Execution Target**: NT8 chart (BarsArray[0] primary, [1] ADX MTF, [2..] StackEMA), `Calculate.OnBarClose`
 
 ---
 
 ## 📜 Version History & Change Log
+### [v0.97] — 2026-08-08
+- **Re-audit lần 2 — polish dead code + mermaid + NY safety + CI**:
+  - `Bot.AtmMerge.cs:27` xóa write-only `atmMergePosition/StopQuantity/TargetQuantity` (chỉ set không read).
+  - `Draw.HudFactory.cs:30` xóa unused `shiftControlBg/toggleOffBgStatic` copy dư TradeManager.
+  - `Kat34ScalperLogic.cs:137,290` annotate orphan `PassMarketFilter` (volume-only inline giữ cho test) + A1 legacy `SlopeAngleDeg/A1Direction` (sibling owns A1, giữ cho xunit).
+  - `Bot.Risk.cs:28` wrap `GetNySessionStartUtc` trong try/Print return 0 — tránh throw crash watchdog/bar khi zone miss.
+  - `DIARY.md:3` mermaid `Kat8934` cũ → mới `Kat34Scalper B1/B2/Filter/Bot/Draw/StackEMA + siblings`.
+  - `.github/workflows/ci.yml:22` compile gate trước `exit 0` vô điều kiện → chỉ skip khi log chứa `NinjaTrader.` miss, ngược lại fail thật.
+  - Graph stale `b42ceac` → `cf76650` sau `graphify update .` (791 nodes).
+  - Verify: `Run-AllChecks` 3 steps 124 tests 0 warn ALL GREEN.
 ### [v0.96] — 2026-08-08
 - **Re-audit full fix (audit 2026-08-08)**: apply toàn bộ findings, tách module + thêm test + tool.
   - **Bug fix high**: `Bot:FlattenAllPositions` thiếu `Instrument.FullName` filter → cancel nhầm order symbol khác `Kat34Scalper.Bot.cs:1141`; `Draw:ClearOldSignalDrawings` chỉ reset B1 state, B2/A2 ghost `Kat34Scalper.Draw.cs:298`; `Signal:diagnosticA0Dir` dead field xóa `Kat34Scalper.Signal.cs:22` + B2 print; `Bot:CalculateDailyPnL` poisoned baseline khi `realizedReadOk=false` vẫn cộng unrealized → early return 0 `Kat34Scalper.Bot.Risk.cs:80`; `Bot:pendingOrderOwner` default `"B1"`→`""` + `SignalOwnerEnabled` unknown→false `Kat34Scalper.Bot.cs:43,179`; dup comment xóa.

@@ -25,7 +25,9 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			Account acc = ResolveBotAccount();
 			if (acc == null) return 0;
 
-			DateTime currentSessionStartUtc = Kat34ScalperLogic.GetNySessionStartUtc(DateTime.UtcNow);
+			DateTime currentSessionStartUtc;
+			try { currentSessionStartUtc = Kat34ScalperLogic.GetNySessionStartUtc(DateTime.UtcNow); }
+			catch (Exception ex) { Print("[Kat34Scalper] NY session calc failed: " + ex.Message); return 0; }
 			double currentRealizedPnL = 0;
 			bool realizedReadOk;
 			try

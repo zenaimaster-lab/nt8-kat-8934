@@ -27,8 +27,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private readonly SolidColorBrush atmSetOnBg = CreateFrozenBrush(Color.FromRgb(180, 90, 20));
 		private readonly SolidColorBrush dailyOffBg = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
 		private readonly SolidColorBrush dailyOnBg = CreateFrozenBrush(Color.FromRgb(58, 19, 107));
-		private static readonly SolidColorBrush shiftControlBg = CreateFrozenBrush(Color.FromRgb(20, 20, 20));
-		private static readonly SolidColorBrush toggleOffBgStatic = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
 
 		private Button CreateButton(string text, Brush bg, RoutedEventHandler handler, double height = 24, double fontSize = 10)
 		{
