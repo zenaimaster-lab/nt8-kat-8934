@@ -1088,4 +1088,128 @@ public class Kat34ScalperLogicTests
 		finally { Directory.Delete(user, true); Directory.Delete(install, true); }
 	}
 	#endregion
+
+	#region Audit-fix coverage — edge, boundary, regression (v0.96)
+	[Fact]
+	public void StackEmaDirection_PriceEqualsEma_NeutralZero()
+	{
+		// price exactly on EMA => strictly-above/below fails => Neutral
+		Assert.Equal(0, StackEmaLogic.Direction(100, 100, 99, 98, 97, 96));
+		Assert.Equal(0, StackEmaLogic.Direction(100, 99, 100, 98, 97, 96)); // one EMA equals price => not strictly above
+		Assert.Equal(-1, StackEmaLogic.Direction(90, 91, 92, 93, 94, 95)); // strictly below => -1
+	}
+
+	[Fact]
+	public void StackEmaFilter_Boundary_DirectionsCovered()
+	{
+		// enabled packs only; disabled packs ignored even if negative
+		Assert.True(StackEmaLogic.FilterPass(true, true, new[] { 1, -1 }, new[] { true, false }));
+		Assert.False(StackEmaLogic.FilterPass(true, true, new[] { 1, -1 }, new[] { true, true })); // second pack -1 breaks buy
+		Assert.True(StackEmaLogic.FilterPass(true, false, new[] { -1, -1 }, new[] { true, true }));
+	}
+
+	[Fact]
+	public void BarsAgoAtOrBefore_SingleElement_AndZeroMax()
+	{
+		var times = new[] { T(10, 0) };
+		// maxBarsAgo <1 => contract returns -1 regardless of time
+		Assert.Equal(-1, Kat34ScalperLogic.BarsAgoAtOrBefore(i => times[i], 0, T(10, 0)));
+		Assert.Equal(-1, Kat34ScalperLogic.BarsAgoAtOrBefore(i => times[i], 0, T(9, 0)));
+		// single element valid max = 0 -> use separate array with 2 elements for max=1 case
+		var times2 = new[] { T(10, 0), T(9, 0) };
+		Assert.Equal(0, Kat34ScalperLogic.BarsAgoAtOrBefore(i => times2[i], 1, T(10, 0)));
+		Assert.Equal(1, Kat34ScalperLogic.BarsAgoAtOrBefore(i => times2[i], 1, T(9, 0)));
+		Assert.Equal(-1, Kat34ScalperLogic.BarsAgoAtOrBefore(i => times2[i], 1, T(8, 0)));
+	}
+
+	[Fact]
+	public void ClosedBarCutoff_TickTarget_ConservativeCutoff()
+	{
+		var open = new DateTime(2026, 8, 4, 10, 0, 0);
+		// Kat34ScalperLogic: source 30s, target 0 (non-time) => cutoff = open +30s (source close)
+		// StackEmaLogic same formula; tick target 0 means add full source period
+		Assert.Equal(open.AddSeconds(30), Kat34ScalperLogic.ClosedBarCutoff(open, 30, 0));
+		Assert.Equal(open.AddSeconds(30), StackEmaLogic.ClosedBarCutoff(open, 30, 0));
+	}
+
+	[Fact]
+	public void GetNySessionStartUtc_BeforeAndAfter18Ny()
+	{
+		// Find NY zone (Windows vs Linux)
+		TimeZoneInfo ny;
+		try { ny = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+		catch { ny = TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+		// Pick a summer day (EDT UTC-4): 2026-07-01 16:00 UTC = 12:00 NY (<18) => session prev day 18:00 NY
+		var utcBefore = new DateTime(2026, 7, 1, 16, 0, 0, DateTimeKind.Utc);
+		var sessBefore = Kat34ScalperLogic.GetNySessionStartUtc(utcBefore);
+		var sessBeforeNy = TimeZoneInfo.ConvertTimeFromUtc(sessBefore, ny);
+		Assert.Equal(new TimeSpan(18, 0, 0), sessBeforeNy.TimeOfDay);
+		Assert.Equal(new DateTime(2026, 6, 30), sessBeforeNy.Date);
+		// After 18 NY: 2026-07-01 23:00 UTC = 19:00 NY (>18) => session same day 18:00 NY
+		var utcAfter = new DateTime(2026, 7, 1, 23, 0, 0, DateTimeKind.Utc);
+		var sessAfter = Kat34ScalperLogic.GetNySessionStartUtc(utcAfter);
+		var sessAfterNy = TimeZoneInfo.ConvertTimeFromUtc(sessAfter, ny);
+		Assert.Equal(new TimeSpan(18, 0, 0), sessAfterNy.TimeOfDay);
+		Assert.Equal(new DateTime(2026, 7, 1), sessAfterNy.Date);
+	}
+
+	[Fact]
+	public void CalculateBreakevenPrice_NegativeBufferAndZeroTick_Edge()
+	{
+		Assert.Equal(5000.0, Kat34ScalperLogic.CalculateBreakevenPrice(true, 5000.0, -5, 0.25), 4); // negative clamped 0
+		Assert.Equal(5000.0, Kat34ScalperLogic.CalculateBreakevenPrice(true, 5000.0, 2, 0), 4); // zero tick => entry
+		Assert.Equal(5000.0, Kat34ScalperLogic.CalculateBreakevenPrice(true, 5000.0, 2, -1), 4); // negative tick => entry
+	}
+
+	[Fact]
+	public void EvaluateDailyRiskBreach_ZeroLimit_NeverBreach()
+	{
+		Assert.False(Kat34ScalperLogic.EvaluateDailyRiskBreach(true, 0, true, 0, -100000, out _));
+		Assert.False(Kat34ScalperLogic.EvaluateDailyRiskBreach(true, 0, false, 1000, -100000, out _));
+	}
+
+	[Fact]
+	public void ShouldCaptureSessionBaseline_SessionAdvance_AndStaleRead()
+	{
+		var s1 = new DateTime(2026, 7, 30, 22, 0, 0, DateTimeKind.Utc);
+		var s2 = s1.AddDays(1);
+		// first capture ok
+		Assert.True(Kat34ScalperLogic.ShouldCaptureSessionBaseline(false, s1, DateTime.MinValue, true));
+		// same session, already captured => false
+		Assert.False(Kat34ScalperLogic.ShouldCaptureSessionBaseline(true, s1, s1, true));
+		// session advanced => true
+		Assert.True(Kat34ScalperLogic.ShouldCaptureSessionBaseline(true, s2, s1, true));
+		// read failed => never capture
+		Assert.False(Kat34ScalperLogic.ShouldCaptureSessionBaseline(false, s2, s1, false));
+	}
+
+	[Fact]
+	public void NormalizeAtmSetName_UnicodeAndTrim_Edge()
+	{
+		Assert.Equal("€AB", Kat34ScalperLogic.NormalizeAtmSetName(" €AB ", "X"));
+		Assert.Equal("AB", Kat34ScalperLogic.NormalizeAtmSetName(" AB\n", "X"));
+	}
+
+	[Fact]
+	public void IsStopOnValidSide_Equality_False()
+	{
+		Assert.False(Kat34ScalperLogic.IsStopOnValidSide(true, 100.0, 100.0));
+		Assert.False(Kat34ScalperLogic.IsStopOnValidSide(false, 100.0, 100.0));
+	}
+
+	[Fact]
+	public void ShouldCancelFlatOrphans_PendingEntryBlocks()
+	{
+		Assert.False(Kat34ScalperLogic.ShouldCancelFlatOrphans(true, true, true));
+		Assert.True(Kat34ScalperLogic.ShouldCancelFlatOrphans(true, true, false));
+	}
+
+	[Fact]
+	public void A2_Buy_ExactLowOnEma34_TouchCounts()
+	{
+		var s = new KatA2State();
+		// low exactly == ema34 with close above => touch valid
+		Assert.Equal(KatA2Action.NewEntry, Kat34ScalperLogic.UpdateA2(KatSignalKind.Buy, true, 101.0, 100.5, 100.8, 100.5, 1, 0.25, s));
+	}
+	#endregion
 }

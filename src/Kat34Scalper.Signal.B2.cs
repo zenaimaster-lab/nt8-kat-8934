@@ -74,8 +74,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					TrySubmitBotEntry(false, b2SellState.C2, B2EntryOffsetTicks, "B2");
 				}
 				else
-					Print(string.Format("[Kat34Scalper][B2] bar {0} SELL result suppressed by filters; A0={1}, allowed={2}",
-						CurrentBar, diagnosticA0Dir, sellAllowed));
+					Print(string.Format("[Kat34Scalper][B2] bar {0} SELL suppressed by filter; sellAllowed={1}",
+						CurrentBar, sellAllowed));
 			}
 			if (buySignal == KatSignalKind.Buy)
 			{
@@ -85,8 +85,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					TrySubmitBotEntry(true, b2BuyState.C2, B2EntryOffsetTicks, "B2");
 				}
 				else
-					Print(string.Format("[Kat34Scalper][B2] bar {0} BUY result suppressed by filters; A0={1}, allowed={2}",
-						CurrentBar, diagnosticA0Dir, buyAllowed));
+					Print(string.Format("[Kat34Scalper][B2] bar {0} BUY suppressed by filter; buyAllowed={1}",
+						CurrentBar, buyAllowed));
 			}
 
 			if (b2SellState.Phase != sellPhaseBefore)

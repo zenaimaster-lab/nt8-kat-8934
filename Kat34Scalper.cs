@@ -1,6 +1,6 @@
 /*
  * Kat34Scalper.cs — main module (lifecycle, settings, orchestration)
- * Version: 0.95 (2026-08-08)
+ * Version: 0.96 (2026-08-08)
  * NinjaTrader 8 — EMA 34/89 rejection signal indicator (Sell / Buy).
  *
  * Co-Authored-By: Oz <oz-agent@warp.dev>
@@ -17,8 +17,11 @@
  *   src/Kat34Scalper.Filter.cs         — Filter module: ADX rising/ADX MTF/ER/CI/Volume/Time/StackEMA gates
  *   src/Kat34Scalper.StackEMA.cs       — StackEMA filter adapter (mapped secondary series, shared pure logic)
  *   ..\nt8-kat-StackEMA\nt8-kat-StackEMA.cs + StackEmaLogic.cs — standalone StackEMA indicator (independent sibling repo)
- *   src/Kat34Scalper.Bot.cs            — Bot module: order ops, stop/limit, ATM
- *   src/Kat34Scalper.Draw.cs           — Draw module: lines + ATM triggers + HUD
+ *   src/Kat34Scalper.Bot.cs            — Bot module: order ops, stop/limit, migration, Close/Flatten
+ *   src/Kat34Scalper.Bot.Risk.cs       — Bot.Risk: Daily MaxDD/MaxProfit NY session baseline + breach gate
+ *   src/Kat34Scalper.Bot.AtmMerge.cs   — Bot.AtmMerge: ATM bracket MERGE reconciliation (anchor resize, duplicate/stale cancel)
+ *   src/Kat34Scalper.Draw.cs           — Draw module: lines + ATM triggers + HUD assembly
+ *   src/Kat34Scalper.Draw.HudFactory.cs — Draw.HudFactory: pixel-perfect tokens + factory (buttons, grids, cards, templates)
  */
 
 #region Using declarations
@@ -87,7 +90,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 	public partial class Kat34Scalper : Indicator
 	{
 		#region Shared State (owned by main; module-specific state lives in its own file)
-		public const string VERSION = "0.95";
+		public const string VERSION = "0.96";
 		public const string RELEASE_DATE = "2026-08-08";
 
 

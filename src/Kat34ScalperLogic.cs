@@ -533,9 +533,14 @@ namespace Kat34Scalper
 			{
 				nyZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
 			}
-			catch
+			catch (TimeZoneNotFoundException)
 			{
-				nyZone = TimeZoneInfo.Local;
+				// Non-Windows host (e.g. CI Linux): EST maps to America/New_York
+				nyZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+			}
+			catch (Exception ex)
+			{
+				throw new InvalidOperationException("NY timezone not found: " + ex.Message, ex);
 			}
 
 			DateTime nowNy = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, nyZone);

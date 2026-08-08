@@ -17,9 +17,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 	// file that declares the base class, duplicating cacheKat34Scalper/wrappers across files.
 	public partial class Kat34Scalper
 	{
-		// --- Shared signal-module diagnostics (written by Filter.PassFilters, read by B1 prints) ---
+		// --- Shared signal-module diagnostics (written by Filter.PassFilters, read by B1/B2 prints) ---
 		private bool diagnosticGateInitialized;
-		private int diagnosticA0Dir;
 		private bool diagnosticSellAllowed;
 		private bool diagnosticBuyAllowed;
 

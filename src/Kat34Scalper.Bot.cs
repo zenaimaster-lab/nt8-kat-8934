@@ -33,14 +33,9 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private double cachedDailyMaxProfit = 1000;
 		private volatile int cachedBotBufferTicks = 2;
 
-		private DateTime lastSessionStartUtc;
-		private double sessionStartRealizedPnL;
-		private bool isSessionStartCaptured;
-		private int dailyRiskFlattened;
-
 		private Order pendingOrder;
 		private Account pendingOrderAccount; // account that owns pendingOrder (cancel must target owner account)
-		private string pendingOrderOwner = "B1"; // signal module that submitted pendingOrder ("B1"/"B2" — per-signal cancel)
+		private string pendingOrderOwner = ""; // signal module that submitted pendingOrder ("B1"/"B2" — per-signal cancel)
 		private int pendingOffsetTicks = 1; // entry offset of the owning signal (migration re-place must reuse it)
 		private bool pendingIsBuy;
 		private double pendingEntryPrice; // last submitted entry price (limit OR stop — Order.StopPrice is 0 on limits)
@@ -50,78 +45,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private string atmLevelsName = "\0"; // never matches a real template name — forces first parse
 		private Kat34ScalperAtmData atmLevels;
 		private readonly System.Collections.Generic.Dictionary<string, bool> signalInTradeMap = new System.Collections.Generic.Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-
-		#region Daily Risk Protection
-		private double CalculateDailyPnL()
-		{
-			Account acc = ResolveBotAccount();
-			if (acc == null) return 0;
-
-			DateTime currentSessionStartUtc = Kat34ScalperLogic.GetNySessionStartUtc(DateTime.UtcNow);
-			double currentRealizedPnL = 0;
-			bool realizedReadOk;
-			try
-			{
-				currentRealizedPnL = acc.Get(AccountItem.GrossRealizedProfitLoss, Currency.UsDollar);
-				realizedReadOk = true;
-			}
-			catch
-			{
-				realizedReadOk = false;
-			}
-
-			if (Kat34ScalperLogic.ShouldCaptureSessionBaseline(isSessionStartCaptured, currentSessionStartUtc, lastSessionStartUtc, realizedReadOk))
-			{
-				lastSessionStartUtc = currentSessionStartUtc;
-				sessionStartRealizedPnL = currentRealizedPnL;
-				isSessionStartCaptured = true;
-			}
-
-			double dailyRealized = realizedReadOk ? currentRealizedPnL - sessionStartRealizedPnL : 0;
-			double dailyUnrealized = 0;
-			try
-			{
-				dailyUnrealized = acc.Get(AccountItem.UnrealizedProfitLoss, Currency.UsDollar);
-			}
-			catch { }
-
-			return dailyRealized + dailyUnrealized;
-		}
-
-		private bool IsDailyRiskBreached(out string breachReason)
-		{
-			breachReason = string.Empty;
-			Account acc = ResolveBotAccount();
-			if (acc == null) return false;
-
-			double dailyPnL = CalculateDailyPnL();
-
-			return Kat34ScalperLogic.EvaluateDailyRiskBreach(
-				cachedIsDailyMaxDD, cachedDailyMaxDD,
-				cachedIsDailyMaxProfit, cachedDailyMaxProfit,
-				dailyPnL, out breachReason);
-		}
-
-		private void EvaluateDailyRiskLimits()
-		{
-			Account acc = ResolveBotAccount();
-			if (acc == null) return;
-
-			if (IsDailyRiskBreached(out string breachReason))
-			{
-				if (System.Threading.Interlocked.CompareExchange(ref dailyRiskFlattened, 1, 0) == 0)
-				{
-					Print(string.Format("[Kat34Scalper] EMERGENCY CANCEL triggered by Daily Risk Protection: {0}", breachReason));
-					ShowHudStatus(breachReason, Brushes.OrangeRed);
-					CancelPendingBotOrder(breachReason);
-				}
-			}
-			else
-			{
-				System.Threading.Interlocked.Exchange(ref dailyRiskFlattened, 0);
-			}
-		}
-		#endregion
 
 		private bool IsSignalInTrade(string owner)
 		{
@@ -174,14 +97,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		}
 
 		// BOT trades exactly the signals that are ON: an owner switched OFF never submits
-		// (and its pending order was already cancelled by SetAXSignal(false)).
-		// BOT trades exactly the signals that are ON: an owner switched OFF never submits
-		// (and its pending order was already cancelled by SetAXSignal(false)).
+		// (and its pending order was already cancelled by Set*Signal(false)).
 		private bool SignalOwnerEnabled(string owner)
 		{
 			if (owner == "B1") return cachedB1;
 			if (owner == "B2") return cachedB2;
-			return true;
+			return false;
 		}
 
 		private bool HasOpenPosition(Account acc)
@@ -399,6 +320,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		#region Market Order / BE / Revert (ported from KatTradeManager)
 		private DateTime lastEntrySubmitTime = DateTime.MinValue;
 		private const double EntryDebounceMs = 500;
+		private enum RevertAction { None = 0, Buy = 1, Sell = 2 }
 		private int pendingRevertAction;   // 0 = none, 1 = Buy, 2 = Sell
 		private int pendingRevertQuantity;
 		private int pendingRevertSubmitInFlight;
@@ -708,7 +630,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 
 				OrderAction oppositeAction = pos.MarketPosition == MarketPosition.Long ? OrderAction.Sell : OrderAction.Buy;
 				int revertQty = pos.Quantity;
-				System.Threading.Interlocked.Exchange(ref pendingRevertAction, oppositeAction == OrderAction.Buy ? 1 : 2);
+				System.Threading.Interlocked.Exchange(ref pendingRevertAction, (int)(oppositeAction == OrderAction.Buy ? RevertAction.Buy : RevertAction.Sell));
 				System.Threading.Interlocked.Exchange(ref pendingRevertQuantity, revertQty);
 
 				// Close current position first
@@ -779,7 +701,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				return;
 			try
 			{
-				OrderAction action = reqAction == 1 ? OrderAction.Buy : OrderAction.Sell;
+				OrderAction action = reqAction == (int)RevertAction.Buy ? OrderAction.Buy : OrderAction.Sell;
 				if (PlaceMarketOrder(action, reqQty))
 				{
 					System.Threading.Interlocked.Exchange(ref pendingRevertAction, 0);
@@ -790,335 +712,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			finally
 			{
 				System.Threading.Interlocked.Exchange(ref pendingRevertSubmitInFlight, 0);
-			}
-		}
-		#endregion
-
-		#region ATM Bracket MERGE Engine (ported from KatTradeManager — always ON)
-		private readonly object atmScaleInLock = new object();
-		private Order atmStartupOrder;
-		private DateTime atmLastLifecycleActivityUtc = DateTime.MinValue;
-		private bool atmPositionWasConfirmedThisEpisode;
-		private const double AtmLifecycleGraceMilliseconds = 3000.0;
-
-		private Order atmMergeStopAnchor;
-		private Order atmMergeTargetAnchor;
-		private MarketPosition atmMergePosition = MarketPosition.Flat;
-		private int atmMergeStopQuantity;
-		private int atmMergeTargetQuantity;
-		private int atmMergeScheduled;
-
-		private static bool SameOrder(Order left, Order right)
-		{
-			if (ReferenceEquals(left, right)) return true;
-			if (left == null || right == null) return false;
-			return !string.IsNullOrEmpty(left.OrderId) && left.OrderId == right.OrderId;
-		}
-
-		private static bool IsMergeCandidateState(OrderState state)
-		{
-			return state == OrderState.Initialized
-				|| state == OrderState.Submitted
-				|| state == OrderState.Accepted
-				|| state == OrderState.AcceptedByRisk
-				|| state == OrderState.Working
-				|| state == OrderState.TriggerPending
-				|| state == OrderState.ChangePending
-				|| state == OrderState.ChangeSubmitted
-				|| state == OrderState.PartFilled
-				|| state == OrderState.Suspended;
-		}
-
-		private static bool HasAtmBracketName(Order order)
-		{
-			if (order == null || string.IsNullOrEmpty(order.Name)) return false;
-			string name = order.Name;
-			return name.IndexOf("stop", StringComparison.OrdinalIgnoreCase) >= 0
-				|| name.IndexOf("target", StringComparison.OrdinalIgnoreCase) >= 0
-				|| name.IndexOf("profit", StringComparison.OrdinalIgnoreCase) >= 0;
-		}
-
-		private static bool HasAtmEntrySignal(Order order)
-		{
-			return order != null
-				&& !string.IsNullOrEmpty(order.FromEntrySignal)
-				&& order.FromEntrySignal.IndexOf("entry", StringComparison.OrdinalIgnoreCase) >= 0;
-		}
-
-		private bool IsKnownAtmBracket(Order order)
-		{
-			if (order == null) return false;
-			lock (atmScaleInLock)
-			{
-				if (ReferenceEquals(order, atmMergeStopAnchor) || ReferenceEquals(order, atmMergeTargetAnchor))
-					return true;
-				if (atmMergeStopAnchor != null && !string.IsNullOrEmpty(atmMergeStopAnchor.Oco)
-					&& string.Equals(atmMergeStopAnchor.Oco, order.Oco, StringComparison.Ordinal))
-					return true;
-				if (atmMergeTargetAnchor != null && !string.IsNullOrEmpty(atmMergeTargetAnchor.Oco)
-					&& string.Equals(atmMergeTargetAnchor.Oco, order.Oco, StringComparison.Ordinal))
-					return true;
-				return false;
-			}
-		}
-
-		private bool IsAtmBracketCandidate(Order order)
-		{
-			if (order == null || Instrument == null || order.Instrument != Instrument) return false;
-			if (IsManualExitOrder(order) || !IsMergeCandidateState(order.OrderState)) return false;
-			if (order.OrderType != OrderType.StopMarket
-				&& order.OrderType != OrderType.StopLimit
-				&& order.OrderType != OrderType.Limit)
-				return false;
-			return HasAtmBracketName(order) || HasAtmEntrySignal(order) || IsKnownAtmBracket(order);
-		}
-
-		private static bool IsAtmExitAction(OrderAction action, MarketPosition position)
-		{
-			return position == MarketPosition.Long
-				? action == OrderAction.Sell || action == OrderAction.SellShort
-				: action == OrderAction.Buy || action == OrderAction.BuyToCover;
-		}
-
-		private static bool IsManualExitOrder(Order order)
-		{
-			return order != null
-				&& !string.IsNullOrEmpty(order.Name)
-				&& order.Name.StartsWith("KAT_", StringComparison.OrdinalIgnoreCase);
-		}
-
-		private void TrackAtmStartup(Order order)
-		{
-			if (order == null) return;
-			lock (atmScaleInLock)
-			{
-				atmStartupOrder = order;
-				atmLastLifecycleActivityUtc = DateTime.UtcNow;
-				atmPositionWasConfirmedThisEpisode = false;
-			}
-		}
-
-		private void ClearAtmStartup(Order expected = null)
-		{
-			lock (atmScaleInLock)
-			{
-				if (expected == null || SameOrder(atmStartupOrder, expected))
-					atmStartupOrder = null;
-			}
-		}
-
-		private bool IsAtmStartupPending()
-		{
-			Order startup;
-			DateTime lastActivity;
-			lock (atmScaleInLock)
-			{
-				startup = atmStartupOrder;
-				lastActivity = atmLastLifecycleActivityUtc;
-			}
-			if (startup == null) return false;
-			if (IsActiveOrderState(startup.OrderState))
-				return true;
-			if (lastActivity == DateTime.MinValue) return true;
-			return (DateTime.UtcNow - lastActivity).TotalMilliseconds < AtmLifecycleGraceMilliseconds;
-		}
-
-		private void ResetAtmScaleInTracking()
-		{
-			lock (atmScaleInLock)
-			{
-				atmMergeStopAnchor = null;
-				atmMergeTargetAnchor = null;
-				atmMergeStopQuantity = 0;
-				atmMergeTargetQuantity = 0;
-				atmMergePosition = MarketPosition.Flat;
-				atmStartupOrder = null;
-				atmLastLifecycleActivityUtc = DateTime.MinValue;
-				atmPositionWasConfirmedThisEpisode = false;
-			}
-		}
-
-		private void ScheduleAtmBracketMerge()
-		{
-			Account acc = ResolveBotAccount();
-			if (acc == null || Instrument == null) return;
-			if (System.Threading.Interlocked.CompareExchange(ref atmMergeScheduled, 1, 0) != 0) return;
-
-			Action merge = () =>
-			{
-				try
-				{
-					MergeAtmBrackets();
-				}
-				catch (Exception ex)
-				{
-					Print(string.Format("[Kat34Scalper] ATM MERGE execution failed: {0}", ex.Message));
-				}
-				finally
-				{
-					System.Threading.Interlocked.Exchange(ref atmMergeScheduled, 0);
-				}
-			};
-
-			try
-			{
-				if (ChartControl != null && ChartControl.Dispatcher != null)
-					ChartControl.Dispatcher.BeginInvoke(merge);
-				else
-					merge();
-			}
-			catch
-			{
-				System.Threading.Interlocked.Exchange(ref atmMergeScheduled, 0);
-			}
-		}
-
-		private void MergeAtmBrackets()
-		{
-			Account acc = ResolveBotAccount();
-			if (acc == null || Instrument == null) return;
-
-			try
-			{
-				Position position = GetInstrumentPosition();
-				System.Collections.Generic.List<Order> candidates = new System.Collections.Generic.List<Order>();
-				if (acc.Orders != null)
-				{
-					lock (acc.Orders)
-					{
-						foreach (Order o in acc.Orders)
-							if (IsAtmBracketCandidate(o)) candidates.Add(o);
-					}
-				}
-
-				bool positionConfirmed = position != null && position.MarketPosition != MarketPosition.Flat;
-				if (positionConfirmed)
-				{
-					lock (atmScaleInLock)
-					{
-						if (!atmPositionWasConfirmedThisEpisode)
-							atmLastLifecycleActivityUtc = DateTime.UtcNow;
-						atmPositionWasConfirmedThisEpisode = true;
-					}
-					ClearAtmStartup();
-				}
-
-				if (!positionConfirmed)
-				{
-					bool startupPending = IsAtmStartupPending();
-					bool wasPositionConfirmed;
-					DateTime lastActivity;
-					lock (atmScaleInLock)
-					{
-						wasPositionConfirmed = atmPositionWasConfirmedThisEpisode;
-						lastActivity = atmLastLifecycleActivityUtc;
-					}
-
-					double activityAge = lastActivity == DateTime.MinValue
-						? -1
-						: (DateTime.UtcNow - lastActivity).TotalMilliseconds;
-
-					if (Kat34ScalperLogic.ShouldDeferAtmFlatCleanup(
-						startupPending,
-						false,
-						wasPositionConfirmed,
-						activityAge,
-						AtmLifecycleGraceMilliseconds))
-					{
-						return; // inside grace period: defer flat cleanup
-					}
-
-					if (candidates.Count > 0)
-					{
-						foreach (Order c in candidates)
-							try { acc.Cancel(new[] { c }); } catch { }
-						Print(string.Format("[Kat34Scalper] ATM MERGE flat cleanup: cancelled {0} bracket(s).", candidates.Count));
-					}
-					ResetAtmScaleInTracking();
-					return;
-				}
-
-				System.Collections.Generic.List<Order> brackets = candidates
-					.Where(o => IsAtmExitAction(o.OrderAction, position.MarketPosition))
-					.ToList();
-				System.Collections.Generic.List<Order> staleOppositeBrackets = candidates
-					.Where(o => !IsAtmExitAction(o.OrderAction, position.MarketPosition))
-					.ToList();
-
-				if (staleOppositeBrackets.Count > 0)
-				{
-					foreach (Order stale in staleOppositeBrackets)
-						try { acc.Cancel(new[] { stale }); } catch { }
-					Print(string.Format("[Kat34Scalper] ATM MERGE: cancelled {0} stale opposite bracket(s).", staleOppositeBrackets.Count));
-				}
-
-				System.Collections.Generic.List<Order> stops = brackets
-					.Where(o => o.OrderType == OrderType.StopMarket || o.OrderType == OrderType.StopLimit)
-					.ToList();
-				System.Collections.Generic.List<Order> targets = brackets
-					.Where(o => o.OrderType == OrderType.Limit)
-					.ToList();
-
-				Order stopAnchor;
-				Order targetAnchor;
-				lock (atmScaleInLock)
-				{
-					stopAnchor = atmMergeStopAnchor != null && stops.Contains(atmMergeStopAnchor)
-						? atmMergeStopAnchor
-						: stops.FirstOrDefault();
-					targetAnchor = atmMergeTargetAnchor != null && targets.Contains(atmMergeTargetAnchor)
-						? atmMergeTargetAnchor
-						: targets.FirstOrDefault();
-					atmMergePosition = position.MarketPosition;
-					atmMergeStopAnchor = stopAnchor;
-					atmMergeTargetAnchor = targetAnchor;
-					atmMergeStopQuantity = position.Quantity;
-					atmMergeTargetQuantity = position.Quantity;
-				}
-
-				System.Collections.Generic.List<Order> changes = new System.Collections.Generic.List<Order>();
-				if (stopAnchor != null && stopAnchor.Quantity != position.Quantity)
-				{
-					stopAnchor.QuantityChanged = position.Quantity;
-					changes.Add(stopAnchor);
-				}
-				if (targetAnchor != null && targetAnchor.Quantity != position.Quantity)
-				{
-					targetAnchor.QuantityChanged = position.Quantity;
-					changes.Add(targetAnchor);
-				}
-
-				if (changes.Count > 0)
-				{
-					acc.Change(changes.ToArray());
-					Print(string.Format("[Kat34Scalper] ATM MERGE: resized {0} anchor order(s) to canonical qty {1}.", changes.Count, position.Quantity));
-				}
-
-				System.Collections.Generic.List<Order> duplicates = stops
-					.Where(o => o != stopAnchor)
-					.Concat(targets.Where(o => o != targetAnchor))
-					.ToList();
-
-				if (duplicates.Count > 0)
-				{
-					foreach (Order dup in duplicates)
-						try { acc.Cancel(new[] { dup }); } catch { }
-				}
-
-				int removedCount = duplicates.Count + staleOppositeBrackets.Count;
-				if (changes.Count > 0 || removedCount > 0)
-				{
-					Print(string.Format("[Kat34Scalper] ATM MERGE reconciled: posQty={0} stop={1} target={2} changed={3} removed={4}",
-						position.Quantity,
-						stopAnchor != null ? stopAnchor.OrderType.ToString() : "none",
-						targetAnchor != null ? targetAnchor.OrderType.ToString() : "none",
-						changes.Count,
-						removedCount));
-				}
-			}
-			catch (Exception ex)
-			{
-				Print(string.Format("[Kat34Scalper] ATM MERGE reconciliation failed: {0}", ex.Message));
 			}
 		}
 		#endregion
@@ -1138,12 +731,14 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				// Cancel pending bot entries
 				CancelPendingBotOrder("Close/flatten clicked");
 
-				// Cancel all active working orders on the selected account
+				// Cancel all active working orders on the selected account for this instrument
 				if (acc.Orders != null)
 				{
 					foreach (Order order in acc.Orders)
 					{
-						if (order != null && IsActiveOrderState(order.OrderState))
+						if (order == null || order.Instrument == null || Instrument == null) continue;
+						if (order.Instrument.FullName != Instrument.FullName) continue;
+						if (IsActiveOrderState(order.OrderState))
 						{
 							try { acc.Cancel(new[] { order }); } catch { }
 						}

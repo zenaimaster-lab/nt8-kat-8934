@@ -58,8 +58,12 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			int riseBars = Math.Max(1, AdxRisingBars); // 0 would compare adx against itself — gate permanently closed
 			if (cachedAdxRise && (adxInd == null || CurrentBars[0] < barsAgo + riseBars || adxInd[barsAgo] <= adxInd[barsAgo + riseBars])) return false;
 			if (cachedAdxMtf && !AdxMtfPassAt(barsAgo)) return false;
-			double volSma = cachedVol && volSmaInd != null ? volSmaInd[barsAgo] : 0;
-			if (!Kat34ScalperLogic.PassMarketFilter(0, 0, Volumes[0][barsAgo], volSma, VolumeMinMult)) return false;
+			// Volume leg only: ADX plain gate removed v0.77, so skip dummy adx params
+			if (cachedVol && volSmaInd != null)
+			{
+				double volSma = volSmaInd[barsAgo];
+				if (volSma > 0 && Volumes[0][barsAgo] < volSma * VolumeMinMult) return false;
+			}
 			return true;
 		}
 
