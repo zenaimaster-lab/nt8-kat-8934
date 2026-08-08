@@ -133,6 +133,17 @@ namespace Kat34Scalper
 			return trimmed.Length > 3 ? trimmed.Substring(0, 3) : trimmed;
 		}
 
+		/// <summary>
+		/// Normalizes a Program (Trading Profile) button label: trimmed, at most 8 characters.
+		/// Same contract as KatTradeManager.NormalizeProfileName.
+		/// </summary>
+		public static string NormalizeProfileName(string value, string fallback)
+		{
+			string trimmed = (value ?? string.Empty).Trim();
+			if (trimmed.Length == 0) return fallback;
+			return trimmed.Length > 8 ? trimmed.Substring(0, 8) : trimmed;
+		}
+
 		/// <summary>Market filter: ADX strength + relative volume. volumeSma 0 disables the volume leg.</summary>
 		// ponytail: orphan prod after Filter volume-only inline (v0.96) — kept for xunit Market_* tests; remove if tests move to Filter helper
 		public static bool PassMarketFilter(double adx, double adxMin, double volume, double volumeSma, double volumeMult)

@@ -1,6 +1,6 @@
 # NT8 Kat 34 Scalper — EMA 34/89 Rejection Signal Indicator
 
-**Current Version**: `v0.99` (Released: `2026-08-08`)
+**Current Version**: `v1.00` (Released: `2026-08-08`)
 
 Signal indicator for **NinjaTrader 8 (NT8)**: draws Sell/Buy signals on the chart with entry, SL and TP dash lines. Appears under the **KAT** folder when adding to a chart.
 
@@ -73,7 +73,7 @@ Every signal sub-module is **independent and default OFF**; its stages are speci
 - On an A1 signal it submits a stop order (sell stop below the better candidate low / buy stop above the better candidate high) through the selected **ATM template** on the selected **account**; `None` or a missing template falls back to a bare stop order. If price has **already run past the entry**, the order is submitted as a **limit** instead (a stop on the wrong side of the market would be rejected) — same rule as KatTradeManager.
 - **Migration**: while the entry is still working, a newer bar closing on the setup side of the fast EMA with a better extreme (sell: higher low / buy: lower high) cancels the order and re-places it at the better price once the cancel settles. A 34/89 trend flip cancels the pending entry. One bot order at a time; once filled, the ATM owns the brackets.
 
-## Settings (6 sections + StackEMA packs)
+## Settings
 
 | Section | Settings |
 |---|---|
@@ -83,19 +83,22 @@ Every signal sub-module is **independent and default OFF**; its stages are speci
 | 3.5 Bot Signal B2 — 89uturn34 | `B2Enabled` false, `B2HistoryDays` 3, `EmaFastPeriod` 34 `EmaSlowPeriod` 89 `MaxSequenceBars` 30, `B2EntryOffsetTicks` 1, `B2StopDistanceTicks` 60 / `B2TargetDistanceTicks` 120 (ATM fallback) |
 | 4. Lines & Text | `LineLengthBars` 7, `LineWidth` 2, `ArrowOffsetTicks` 3, `SellEntryLineColor` Red `BuyEntryLineColor` LimeGreen `SLLineColor` Red `TPLineColor` Green `SellTextColor` Red `BuyTextColor` LimeGreen |
 | 5. Bot | `BotEnabled` false, `BotOrderQuantity` 1, `BotAtmTemplate` (`mnq. 1ct. 15-be20-35move15-50triggertrail5step1` default, dropdown + None), `BotAccountName` Sim101, `BotBufferTicks` 2, `DailyMaxDDEnabled` false `DailyMaxDD` 500, `DailyMaxProfitEnabled` false `DailyMaxProfit` 1000 |
-| 6. ATM Quick Sets | Set 1–6 `Name` (max 3 chars, A–F) + `ATM` (assigned template, default none). HUD amber = current. |
+| 6. ATM Quick Sets | Set 1–6 `Name` (max 3 chars, A–F) + `ATM` (assigned template, default none). HUD amber = current. TradeManager quick-set template: centered string Content, `GetQuickSetButtonTemplate` (fix label clip). |
+| HUD | `QuickSetFontSize` 8 (6–12), `QuickSetLabelColor` White + `QuickSetLabelOpacityPercent` 50, `ProgramLabelColor` White + `ProgramLabelOpacityPercent` 20 (80% transparent default) |
+| Trading Profile 1..8 (Program) | Each: `Name` (max 8 chars, P1..P8), `Account` (dropdown), `ATM` (dropdown), `Quantity` 1, `BufferTicks` 2, `DailyMaxDDEnabled` false `DailyMaxDD` 500, `DailyMaxProfitEnabled` false `DailyMaxProfit` 1000 — whole-account package covering account/ATM/qty/buffer/dailyRisk. HUD 8 buttons 2×4, left-aligned, cyan/pink ON (TradeManager Program style). |
+| 8. Daily Risk Quick Sets | Set 1–6 `Name` (max 3 chars, 1..6) + `Max DD` + `Max Profit` — values 200/500, 100/300, 500/1000, 1000/2000, 1500/3000, 2000/5000. HUD 6 buttons string Content + quick-set template, purple ON. |
 
 All signal math runs on the primary series of the chart the indicator is added to. A1's standalone indicator lives in the sibling repo and renders independently.
 
 ## HUD
 TradeManager pixel-perfect panel (HudGap 2, HudPanelWidth 250 → inner 238, UseLayoutRounding): dark navy card `Argb(240,20,24,33)` on draggable canvas (clamped 40px visible), `⚡ KAT 34-ScalperBot vX.XX` header, status line (5 s auto-clear) mirrors bot events.
 - **ACCOUNT** (top black board, TradeManager style): `Monday 04, Aug   02:34:56 pm (NYT)` purple/orange 11px, `Acct: Sim101 • MNQ` 11px, `Balance: $N0`, `Day: +N0` (daily PnL green/red from NY 18:00 session), `U: +N0 | R: +N0` 2-col grid, `Bots: BOT ON/OFF  A2 ON/OFF  B1 ON/OFF  B2 ON/OFF  Flat/Long 1/Short 1/PENDING B1 Buy` 10px SemiBold (BOT green #28C850 / A2 blue #007ACC / B1/B2 dark-blue #0F3C82, OFF gray). Updates every 500 ms via watchdog.
-- **BOT**: account dropdown (syncs ChartTrader), ATM template dropdown (sorted, `None` = bare order), 6 ATM quick-set buttons (amber ON), `⚡ BOT: ON/OFF` (OFF cancels pending), `SELL/BUY MARKET` 43px, `Revert` / `Break Even` 43px, `Close/flatten` 59px, `Max DD` / `Max Profit` purple toggles (2-col span).
+- **BOT**: **Program** quick-sets 8 buttons `P1..P8` 2×4 left-aligned cyan/pink ON (whole-account: account/ATM/qty/buffer/dailyRisk, customized label max 8 chars, `ProgramLabelColor` 80% transparent), account dropdown (syncs ChartTrader), ATM template dropdown (sorted, `None` = bare order), 6 ATM quick-set buttons (amber ON, string Content + `GetQuickSetButtonTemplate` centered, label max 3 chars, `QuickSetFontSize`+2), `⚡ BOT: ON/OFF` (OFF cancels pending), `SELL/BUY MARKET` 43px, `Revert` / `Break Even` 43px, `Close/flatten` 59px, `Max DD` / `Max Profit` purple toggles (2-col span) + **Daily Risk Quick Sets** 6 buttons `1..6` string Content + quick-set template purple 80% transparent ON (custom label max 3 chars, `QuickSetLabelColor` 50% transparent, `QuickSetFontSize` adaptive).
 - **ALERT SIGNAL**: `A2` placeholder toggle.
 - **BOT SIGNAL**: `B1 (34bounce8+)` + `B2 (89uturn34)` dark-blue ON (`#0F3C82`).
 - **BOT FILTER**: 3×2 grid `ADX rising | ADX MTF`, `ER (trend) | CI (chop)`, `Volume | Time window` — blue ON / gray OFF, all OFF by default, session-only.
 - **DRAW**: `Clear` (removes all K34S_* + legacy K8934_*).
-- Drag anywhere outside buttons; HUD position persists per instance.
+- Drag anywhere outside buttons; HUD position persists per instance. All quick-set labels use `GetQuickSetButtonTemplate` (string Content bound to TextBlock) to survive NT8 theme clipping — same fix as TradeManager v1.98.
 
 ## Installation in NinjaTrader 8
 

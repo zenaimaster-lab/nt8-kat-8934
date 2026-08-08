@@ -65,4 +65,4 @@ On every code change, BEFORE closing session:
 ## Version Tracking
 - Code versions: Kat34Scalper.cs VERSION constant
 - Doc versions: README.md, DIARY.md
-   - **Current: v0.99 (2026-08-08)**
+   - **Current: v1.00 (2026-08-08)**

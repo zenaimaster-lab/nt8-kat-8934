@@ -1,6 +1,6 @@
 /*
  * Kat34Scalper.cs — main module (lifecycle, settings, orchestration)
- * Version: 0.99 (2026-08-08)
+ * Version: 1.00 (2026-08-08)
  * NinjaTrader 8 — EMA 34/89 rejection signal indicator (Sell / Buy).
  *
  * Co-Authored-By: Oz <oz-agent@warp.dev>
@@ -91,7 +91,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 	public partial class Kat34Scalper : Indicator
 	{
 		#region Shared State (owned by main; module-specific state lives in its own file)
-		public const string VERSION = "0.99";
+		public const string VERSION = "1.00";
 		public const string RELEASE_DATE = "2026-08-08";
 
 
@@ -208,6 +208,24 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				AtmSet6Name					= "F";
 				AtmSet6Atm					= "";
 
+				// HUD Quick Set Style defaults
+				QuickSetFontSize				= 8;
+				QuickSetLabelColor			= new SolidColorBrush(Color.FromRgb(255, 255, 255));
+				QuickSetLabelOpacityPercent	= 50;
+				ProgramLabelColor				= new SolidColorBrush(Color.FromRgb(255, 255, 255));
+				ProgramLabelOpacityPercent	= 20;
+
+				// 7. Trading Profiles (Program Quick Sets) defaults — 8 presets covering whole account
+				for (int _pi = 0; _pi < 8; _pi++) InitTradingProfileDefaults(_pi);
+
+				// 8. Daily Risk Quick Sets defaults
+				DailyRiskSet1Name				= "1"; DailyRiskSet1MaxDD = 200; DailyRiskSet1MaxProfit = 500;
+				DailyRiskSet2Name				= "2"; DailyRiskSet2MaxDD = 100; DailyRiskSet2MaxProfit = 300;
+				DailyRiskSet3Name				= "3"; DailyRiskSet3MaxDD = 500; DailyRiskSet3MaxProfit = 1000;
+				DailyRiskSet4Name				= "4"; DailyRiskSet4MaxDD = 1000; DailyRiskSet4MaxProfit = 2000;
+				DailyRiskSet5Name				= "5"; DailyRiskSet5MaxDD = 1500; DailyRiskSet5MaxProfit = 3000;
+				DailyRiskSet6Name				= "6"; DailyRiskSet6MaxDD = 2000; DailyRiskSet6MaxProfit = 5000;
+
 				// 4. Lines & Text defaults
 				LineLengthBars				= 7;
 				LineWidth					= 2;
@@ -262,6 +280,20 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				cachedDailyMaxDD = DailyMaxDD;
 				cachedIsDailyMaxProfit = DailyMaxProfitEnabled;
 				cachedDailyMaxProfit = DailyMaxProfit;
+
+				// HUD style migration: ensure defaults for charts saved before this version
+				if (QuickSetFontSize < 6 || QuickSetFontSize > 14) QuickSetFontSize = 8;
+				if (QuickSetLabelColor == null) QuickSetLabelColor = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+				if (QuickSetLabelOpacityPercent < 10 || QuickSetLabelOpacityPercent > 100) QuickSetLabelOpacityPercent = 50;
+				if (ProgramLabelColor == null) ProgramLabelColor = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+				if (ProgramLabelOpacityPercent < 10 || ProgramLabelOpacityPercent > 100) ProgramLabelOpacityPercent = 20;
+				// Migration: pre-version profiles have quantity 0 -> seed defaults per-profile
+				for (int _pi = 0; _pi < 8; _pi++)
+				{
+					int beforeQty = 0;
+					switch (_pi) { case 0: beforeQty=TradingProfile1Quantity; break; case 1: beforeQty=TradingProfile2Quantity; break; case 2: beforeQty=TradingProfile3Quantity; break; case 3: beforeQty=TradingProfile4Quantity; break; case 4: beforeQty=TradingProfile5Quantity; break; case 5: beforeQty=TradingProfile6Quantity; break; case 6: beforeQty=TradingProfile7Quantity; break; default: beforeQty=TradingProfile8Quantity; break; }
+					if (beforeQty==0) SeedTradingProfileDefaults(_pi);
+				}
 
 				if (ChartControl != null)
 					ChartControl.Dispatcher.InvokeAsync(BuildHud);
@@ -707,6 +739,542 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
 		public string AtmSet6Atm { get; set; }
 
+		// --- HUD Quick Set Style ---
+		[NinjaScriptProperty]
+		[Range(6, 12)]
+		[Display(Name = "Quick Set Font Size", Order = 1, GroupName = "HUD", Description = "Font size for quick-set/program preset buttons only (smaller = more space for custom labels).")]
+		public double QuickSetFontSize { get; set; }
+
+		private Brush quickSetLabelColor = Brushes.White;
+		[NinjaScriptProperty]
+		[XmlIgnore]
+		[Display(Name = "Quick Set Label Color", Order = 2, GroupName = "HUD", Description = "Base label color for quick-set/program buttons (combined with opacity below).")]
+		public Brush QuickSetLabelColor
+		{
+			get { return quickSetLabelColor; }
+			set
+			{
+				try
+				{
+					if (value == null) { quickSetLabelColor = Brushes.White; return; }
+					if (value is SolidColorBrush scb)
+					{
+						var c = scb.Color;
+						var nb = new SolidColorBrush(c);
+						if (nb.CanFreeze) nb.Freeze();
+						quickSetLabelColor = nb;
+					}
+					else quickSetLabelColor = value ?? Brushes.White;
+				}
+				catch { quickSetLabelColor = Brushes.White; }
+			}
+		}
+
+		[Browsable(false)]
+		public string QuickSetLabelColorSerializable
+		{
+			get
+			{
+				try
+				{
+					if (quickSetLabelColor is SolidColorBrush scb)
+						return scb.Color.ToString();
+					return Colors.White.ToString();
+				}
+				catch { return Colors.White.ToString(); }
+			}
+			set
+			{
+				try
+				{
+					if (!string.IsNullOrWhiteSpace(value))
+					{
+						var c = (Color)ColorConverter.ConvertFromString(value);
+						var nb = new SolidColorBrush(c);
+						if (nb.CanFreeze) nb.Freeze();
+						quickSetLabelColor = nb;
+					}
+					else quickSetLabelColor = Brushes.White;
+				}
+				catch { quickSetLabelColor = Brushes.White; }
+			}
+		}
+
+		[NinjaScriptProperty]
+		[Range(10, 100)]
+		[Display(Name = "Quick Set Label Opacity %", Order = 3, GroupName = "HUD", Description = "Opacity for quick-set/program label text (100=opaque, 50=50% transparent).")]
+		public int QuickSetLabelOpacityPercent { get; set; }
+
+		private Brush programLabelColor = Brushes.White;
+		[NinjaScriptProperty]
+		[XmlIgnore]
+		[Display(Name = "Program Label Color", Order = 4, GroupName = "HUD", Description = "Base label color for Program (P1..P8) buttons (combined with opacity below). Default white 80% transparent.")]
+		public Brush ProgramLabelColor
+		{
+			get { return programLabelColor; }
+			set
+			{
+				try
+				{
+					if (value == null) { programLabelColor = Brushes.White; return; }
+					if (value is SolidColorBrush scb)
+					{
+						var c = scb.Color;
+						var nb = new SolidColorBrush(c);
+						if (nb.CanFreeze) nb.Freeze();
+						programLabelColor = nb;
+					}
+					else programLabelColor = value ?? Brushes.White;
+				}
+				catch { programLabelColor = Brushes.White; }
+			}
+		}
+
+		[Browsable(false)]
+		public string ProgramLabelColorSerializable
+		{
+			get
+			{
+				try
+				{
+					if (programLabelColor is SolidColorBrush scb)
+						return scb.Color.ToString();
+					return Colors.White.ToString();
+				}
+				catch { return Colors.White.ToString(); }
+			}
+			set
+			{
+				try
+				{
+					if (!string.IsNullOrWhiteSpace(value))
+					{
+						var c = (Color)ColorConverter.ConvertFromString(value);
+						var nb = new SolidColorBrush(c);
+						if (nb.CanFreeze) nb.Freeze();
+						programLabelColor = nb;
+					}
+					else programLabelColor = Brushes.White;
+				}
+				catch { programLabelColor = Brushes.White; }
+			}
+		}
+
+		[NinjaScriptProperty]
+		[Range(10, 100)]
+		[Display(Name = "Program Label Opacity %", Order = 5, GroupName = "HUD", Description = "Opacity for Program label text (100=opaque, 20=80% transparent). Default 20.")]
+		public int ProgramLabelOpacityPercent { get; set; }
+
+		// --- 7. Trading Profiles (Program Quick Sets — whole account: account/ATM/qty/buffer/daily risk) ---
+		private string profile1Name = "P1";
+		private string profile2Name = "P2";
+		private string profile3Name = "P3";
+		private string profile4Name = "P4";
+		private string profile5Name = "P5";
+		private string profile6Name = "P6";
+		private string profile7Name = "P7";
+		private string profile8Name = "P8";
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 1 Name", Order = 1, GroupName = "Trading Profile 1", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile1Name
+		{
+			get { return profile1Name; }
+			set { profile1Name = Kat34ScalperLogic.NormalizeProfileName(value, "P1"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 1 Account", Order = 2, GroupName = "Trading Profile 1")]
+		public string TradingProfile1Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 1 ATM", Order = 3, GroupName = "Trading Profile 1")]
+		public string TradingProfile1Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 1 Quantity", Order = 4, GroupName = "Trading Profile 1")]
+		public int TradingProfile1Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 1 Buffer Ticks", Order = 5, GroupName = "Trading Profile 1")]
+		public int TradingProfile1BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 1 Max DD Enabled", Order = 6, GroupName = "Trading Profile 1")]
+		public bool TradingProfile1DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 1 Max DD ($)", Order = 7, GroupName = "Trading Profile 1")]
+		public double TradingProfile1DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 1 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 1")]
+		public bool TradingProfile1DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 1 Max Profit ($)", Order = 9, GroupName = "Trading Profile 1")]
+		public double TradingProfile1DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 2 Name", Order = 1, GroupName = "Trading Profile 2", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile2Name
+		{
+			get { return profile2Name; }
+			set { profile2Name = Kat34ScalperLogic.NormalizeProfileName(value, "P2"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 2 Account", Order = 2, GroupName = "Trading Profile 2")]
+		public string TradingProfile2Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 2 ATM", Order = 3, GroupName = "Trading Profile 2")]
+		public string TradingProfile2Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 2 Quantity", Order = 4, GroupName = "Trading Profile 2")]
+		public int TradingProfile2Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 2 Buffer Ticks", Order = 5, GroupName = "Trading Profile 2")]
+		public int TradingProfile2BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 2 Max DD Enabled", Order = 6, GroupName = "Trading Profile 2")]
+		public bool TradingProfile2DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 2 Max DD ($)", Order = 7, GroupName = "Trading Profile 2")]
+		public double TradingProfile2DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 2 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 2")]
+		public bool TradingProfile2DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 2 Max Profit ($)", Order = 9, GroupName = "Trading Profile 2")]
+		public double TradingProfile2DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 3 Name", Order = 1, GroupName = "Trading Profile 3", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile3Name
+		{
+			get { return profile3Name; }
+			set { profile3Name = Kat34ScalperLogic.NormalizeProfileName(value, "P3"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 3 Account", Order = 2, GroupName = "Trading Profile 3")]
+		public string TradingProfile3Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 3 ATM", Order = 3, GroupName = "Trading Profile 3")]
+		public string TradingProfile3Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 3 Quantity", Order = 4, GroupName = "Trading Profile 3")]
+		public int TradingProfile3Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 3 Buffer Ticks", Order = 5, GroupName = "Trading Profile 3")]
+		public int TradingProfile3BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 3 Max DD Enabled", Order = 6, GroupName = "Trading Profile 3")]
+		public bool TradingProfile3DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 3 Max DD ($)", Order = 7, GroupName = "Trading Profile 3")]
+		public double TradingProfile3DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 3 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 3")]
+		public bool TradingProfile3DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 3 Max Profit ($)", Order = 9, GroupName = "Trading Profile 3")]
+		public double TradingProfile3DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 4 Name", Order = 1, GroupName = "Trading Profile 4", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile4Name
+		{
+			get { return profile4Name; }
+			set { profile4Name = Kat34ScalperLogic.NormalizeProfileName(value, "P4"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 4 Account", Order = 2, GroupName = "Trading Profile 4")]
+		public string TradingProfile4Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 4 ATM", Order = 3, GroupName = "Trading Profile 4")]
+		public string TradingProfile4Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 4 Quantity", Order = 4, GroupName = "Trading Profile 4")]
+		public int TradingProfile4Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 4 Buffer Ticks", Order = 5, GroupName = "Trading Profile 4")]
+		public int TradingProfile4BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 4 Max DD Enabled", Order = 6, GroupName = "Trading Profile 4")]
+		public bool TradingProfile4DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 4 Max DD ($)", Order = 7, GroupName = "Trading Profile 4")]
+		public double TradingProfile4DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 4 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 4")]
+		public bool TradingProfile4DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 4 Max Profit ($)", Order = 9, GroupName = "Trading Profile 4")]
+		public double TradingProfile4DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 5 Name", Order = 1, GroupName = "Trading Profile 5", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile5Name
+		{
+			get { return profile5Name; }
+			set { profile5Name = Kat34ScalperLogic.NormalizeProfileName(value, "P5"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 5 Account", Order = 2, GroupName = "Trading Profile 5")]
+		public string TradingProfile5Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 5 ATM", Order = 3, GroupName = "Trading Profile 5")]
+		public string TradingProfile5Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 5 Quantity", Order = 4, GroupName = "Trading Profile 5")]
+		public int TradingProfile5Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 5 Buffer Ticks", Order = 5, GroupName = "Trading Profile 5")]
+		public int TradingProfile5BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 5 Max DD Enabled", Order = 6, GroupName = "Trading Profile 5")]
+		public bool TradingProfile5DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 5 Max DD ($)", Order = 7, GroupName = "Trading Profile 5")]
+		public double TradingProfile5DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 5 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 5")]
+		public bool TradingProfile5DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 5 Max Profit ($)", Order = 9, GroupName = "Trading Profile 5")]
+		public double TradingProfile5DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 6 Name", Order = 1, GroupName = "Trading Profile 6", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile6Name
+		{
+			get { return profile6Name; }
+			set { profile6Name = Kat34ScalperLogic.NormalizeProfileName(value, "P6"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 6 Account", Order = 2, GroupName = "Trading Profile 6")]
+		public string TradingProfile6Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 6 ATM", Order = 3, GroupName = "Trading Profile 6")]
+		public string TradingProfile6Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 6 Quantity", Order = 4, GroupName = "Trading Profile 6")]
+		public int TradingProfile6Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 6 Buffer Ticks", Order = 5, GroupName = "Trading Profile 6")]
+		public int TradingProfile6BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 6 Max DD Enabled", Order = 6, GroupName = "Trading Profile 6")]
+		public bool TradingProfile6DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 6 Max DD ($)", Order = 7, GroupName = "Trading Profile 6")]
+		public double TradingProfile6DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 6 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 6")]
+		public bool TradingProfile6DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 6 Max Profit ($)", Order = 9, GroupName = "Trading Profile 6")]
+		public double TradingProfile6DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 7 Name", Order = 1, GroupName = "Trading Profile 7", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile7Name
+		{
+			get { return profile7Name; }
+			set { profile7Name = Kat34ScalperLogic.NormalizeProfileName(value, "P7"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 7 Account", Order = 2, GroupName = "Trading Profile 7")]
+		public string TradingProfile7Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 7 ATM", Order = 3, GroupName = "Trading Profile 7")]
+		public string TradingProfile7Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 7 Quantity", Order = 4, GroupName = "Trading Profile 7")]
+		public int TradingProfile7Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 7 Buffer Ticks", Order = 5, GroupName = "Trading Profile 7")]
+		public int TradingProfile7BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 7 Max DD Enabled", Order = 6, GroupName = "Trading Profile 7")]
+		public bool TradingProfile7DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 7 Max DD ($)", Order = 7, GroupName = "Trading Profile 7")]
+		public double TradingProfile7DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 7 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 7")]
+		public bool TradingProfile7DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 7 Max Profit ($)", Order = 9, GroupName = "Trading Profile 7")]
+		public double TradingProfile7DailyMaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 8 Name", Order = 1, GroupName = "Trading Profile 8", Description = "HUD button label (max 8 chars)")]
+		public string TradingProfile8Name
+		{
+			get { return profile8Name; }
+			set { profile8Name = Kat34ScalperLogic.NormalizeProfileName(value, "P8"); }
+		}
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 8 Account", Order = 2, GroupName = "Trading Profile 8")]
+		public string TradingProfile8Account { get; set; }
+		[NinjaScriptProperty]
+		[TypeConverter(typeof(Kat34ScalperAtmTemplateConverter))]
+		[Display(Name = "Profile 8 ATM", Order = 3, GroupName = "Trading Profile 8")]
+		public string TradingProfile8Atm { get; set; }
+		[NinjaScriptProperty]
+		[Range(1, 100)]
+		[Display(Name = "Profile 8 Quantity", Order = 4, GroupName = "Trading Profile 8")]
+		public int TradingProfile8Quantity { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 100)]
+		[Display(Name = "Profile 8 Buffer Ticks", Order = 5, GroupName = "Trading Profile 8")]
+		public int TradingProfile8BufferTicks { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 8 Max DD Enabled", Order = 6, GroupName = "Trading Profile 8")]
+		public bool TradingProfile8DailyMaxDDEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 8 Max DD ($)", Order = 7, GroupName = "Trading Profile 8")]
+		public double TradingProfile8DailyMaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Display(Name = "Profile 8 Max Profit Enabled", Order = 8, GroupName = "Trading Profile 8")]
+		public bool TradingProfile8DailyMaxProfitEnabled { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Profile 8 Max Profit ($)", Order = 9, GroupName = "Trading Profile 8")]
+		public double TradingProfile8DailyMaxProfit { get; set; }
+
+		// --- 8. Daily Risk Quick Sets (HUD: 6 buttons dưới Max DD/Profit toggles; click áp Max DD+Profit) ---
+		private string dailyRiskSet1Name = "1";
+		private string dailyRiskSet2Name = "2";
+		private string dailyRiskSet3Name = "3";
+		private string dailyRiskSet4Name = "4";
+		private string dailyRiskSet5Name = "5";
+		private string dailyRiskSet6Name = "6";
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 1 Name", Order = 1, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet1Name
+		{
+			get { return dailyRiskSet1Name; }
+			set { dailyRiskSet1Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "1"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 1 Max DD ($)", Order = 2, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet1MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 1 Max Profit ($)", Order = 3, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet1MaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 2 Name", Order = 4, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet2Name
+		{
+			get { return dailyRiskSet2Name; }
+			set { dailyRiskSet2Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "2"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 2 Max DD ($)", Order = 5, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet2MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 2 Max Profit ($)", Order = 6, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet2MaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 3 Name", Order = 7, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet3Name
+		{
+			get { return dailyRiskSet3Name; }
+			set { dailyRiskSet3Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "3"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 3 Max DD ($)", Order = 8, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet3MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 3 Max Profit ($)", Order = 9, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet3MaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 4 Name", Order = 10, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet4Name
+		{
+			get { return dailyRiskSet4Name; }
+			set { dailyRiskSet4Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "4"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 4 Max DD ($)", Order = 11, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet4MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 4 Max Profit ($)", Order = 12, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet4MaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 5 Name", Order = 13, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet5Name
+		{
+			get { return dailyRiskSet5Name; }
+			set { dailyRiskSet5Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "5"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 5 Max DD ($)", Order = 14, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet5MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 5 Max Profit ($)", Order = 15, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet5MaxProfit { get; set; }
+
+		[NinjaScriptProperty]
+		[Display(Name = "Set 6 Name", Order = 16, GroupName = "8. Daily Risk Quick Sets", Description = "Button label (max 3 chars)")]
+		public string DailyRiskSet6Name
+		{
+			get { return dailyRiskSet6Name; }
+			set { dailyRiskSet6Name = Kat34ScalperLogic.NormalizeAtmSetName(value, "6"); }
+		}
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 6 Max DD ($)", Order = 17, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet6MaxDD { get; set; }
+		[NinjaScriptProperty]
+		[Range(0, 1000000)]
+		[Display(Name = "Set 6 Max Profit ($)", Order = 18, GroupName = "8. Daily Risk Quick Sets")]
+		public double DailyRiskSet6MaxProfit { get; set; }
+
 		// --- 4. Lines & Text ---
 		[NinjaScriptProperty]
 		[Display(Name = "Line Length (bars)", Order = 1, GroupName = "4. Lines & Text",
@@ -807,6 +1375,39 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			}
 			catch { }
 			return fallback;
+		}
+
+		// ponytail: DRY profile init for SetDefaults — covers account/ATM/qty/buffer/dailyRisk (whole account)
+		private void InitTradingProfileDefaults(int idx)
+		{
+			string n = "P" + (idx + 1);
+			switch (idx)
+			{
+				case 0: TradingProfile1Name=n; TradingProfile1Account="Sim101"; TradingProfile1Atm=""; TradingProfile1Quantity=1; TradingProfile1BufferTicks=2; TradingProfile1DailyMaxDDEnabled=false; TradingProfile1DailyMaxDD=500; TradingProfile1DailyMaxProfitEnabled=false; TradingProfile1DailyMaxProfit=1000; break;
+				case 1: TradingProfile2Name=n; TradingProfile2Account="Sim101"; TradingProfile2Atm=""; TradingProfile2Quantity=1; TradingProfile2BufferTicks=2; TradingProfile2DailyMaxDDEnabled=false; TradingProfile2DailyMaxDD=500; TradingProfile2DailyMaxProfitEnabled=false; TradingProfile2DailyMaxProfit=1000; break;
+				case 2: TradingProfile3Name=n; TradingProfile3Account="Sim101"; TradingProfile3Atm=""; TradingProfile3Quantity=1; TradingProfile3BufferTicks=2; TradingProfile3DailyMaxDDEnabled=false; TradingProfile3DailyMaxDD=500; TradingProfile3DailyMaxProfitEnabled=false; TradingProfile3DailyMaxProfit=1000; break;
+				case 3: TradingProfile4Name=n; TradingProfile4Account="Sim101"; TradingProfile4Atm=""; TradingProfile4Quantity=1; TradingProfile4BufferTicks=2; TradingProfile4DailyMaxDDEnabled=false; TradingProfile4DailyMaxDD=500; TradingProfile4DailyMaxProfitEnabled=false; TradingProfile4DailyMaxProfit=1000; break;
+				case 4: TradingProfile5Name=n; TradingProfile5Account="Sim101"; TradingProfile5Atm=""; TradingProfile5Quantity=1; TradingProfile5BufferTicks=2; TradingProfile5DailyMaxDDEnabled=false; TradingProfile5DailyMaxDD=500; TradingProfile5DailyMaxProfitEnabled=false; TradingProfile5DailyMaxProfit=1000; break;
+				case 5: TradingProfile6Name=n; TradingProfile6Account="Sim101"; TradingProfile6Atm=""; TradingProfile6Quantity=1; TradingProfile6BufferTicks=2; TradingProfile6DailyMaxDDEnabled=false; TradingProfile6DailyMaxDD=500; TradingProfile6DailyMaxProfitEnabled=false; TradingProfile6DailyMaxProfit=1000; break;
+				case 6: TradingProfile7Name=n; TradingProfile7Account="Sim101"; TradingProfile7Atm=""; TradingProfile7Quantity=1; TradingProfile7BufferTicks=2; TradingProfile7DailyMaxDDEnabled=false; TradingProfile7DailyMaxDD=500; TradingProfile7DailyMaxProfitEnabled=false; TradingProfile7DailyMaxProfit=1000; break;
+				default: TradingProfile8Name=n; TradingProfile8Account="Sim101"; TradingProfile8Atm=""; TradingProfile8Quantity=1; TradingProfile8BufferTicks=2; TradingProfile8DailyMaxDDEnabled=false; TradingProfile8DailyMaxDD=500; TradingProfile8DailyMaxProfitEnabled=false; TradingProfile8DailyMaxProfit=1000; break;
+			}
+		}
+
+		private void SeedTradingProfileDefaults(int idx)
+		{
+			string defName = "P" + (idx + 1);
+			switch (idx)
+			{
+				case 0: if (TradingProfile1Quantity!=0) return; TradingProfile1Name=defName; TradingProfile1Quantity=1; TradingProfile1BufferTicks=2; TradingProfile1DailyMaxDD=500; TradingProfile1DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile1Account)) TradingProfile1Account="Sim101"; break;
+				case 1: if (TradingProfile2Quantity!=0) return; TradingProfile2Name=defName; TradingProfile2Quantity=1; TradingProfile2BufferTicks=2; TradingProfile2DailyMaxDD=500; TradingProfile2DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile2Account)) TradingProfile2Account="Sim101"; break;
+				case 2: if (TradingProfile3Quantity!=0) return; TradingProfile3Name=defName; TradingProfile3Quantity=1; TradingProfile3BufferTicks=2; TradingProfile3DailyMaxDD=500; TradingProfile3DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile3Account)) TradingProfile3Account="Sim101"; break;
+				case 3: if (TradingProfile4Quantity!=0) return; TradingProfile4Name=defName; TradingProfile4Quantity=1; TradingProfile4BufferTicks=2; TradingProfile4DailyMaxDD=500; TradingProfile4DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile4Account)) TradingProfile4Account="Sim101"; break;
+				case 4: if (TradingProfile5Quantity!=0) return; TradingProfile5Name=defName; TradingProfile5Quantity=1; TradingProfile5BufferTicks=2; TradingProfile5DailyMaxDD=500; TradingProfile5DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile5Account)) TradingProfile5Account="Sim101"; break;
+				case 5: if (TradingProfile6Quantity!=0) return; TradingProfile6Name=defName; TradingProfile6Quantity=1; TradingProfile6BufferTicks=2; TradingProfile6DailyMaxDD=500; TradingProfile6DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile6Account)) TradingProfile6Account="Sim101"; break;
+				case 6: if (TradingProfile7Quantity!=0) return; TradingProfile7Name=defName; TradingProfile7Quantity=1; TradingProfile7BufferTicks=2; TradingProfile7DailyMaxDD=500; TradingProfile7DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile7Account)) TradingProfile7Account="Sim101"; break;
+				default: if (TradingProfile8Quantity!=0) return; TradingProfile8Name=defName; TradingProfile8Quantity=1; TradingProfile8BufferTicks=2; TradingProfile8DailyMaxDD=500; TradingProfile8DailyMaxProfit=1000; if(string.IsNullOrWhiteSpace(TradingProfile8Account)) TradingProfile8Account="Sim101"; break;
+			}
 		}
 		#endregion
 	}

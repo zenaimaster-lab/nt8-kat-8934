@@ -27,6 +27,11 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private readonly SolidColorBrush atmSetOnBg = CreateFrozenBrush(Color.FromRgb(180, 90, 20));
 		private readonly SolidColorBrush dailyOffBg = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
 		private readonly SolidColorBrush dailyOnBg = CreateFrozenBrush(Color.FromRgb(58, 19, 107));
+		// Program + DailyRisk quick-set style — TradeManager port (transparent vs opaque)
+		private readonly SolidColorBrush profileOffBg = new SolidColorBrush(Color.FromArgb(128, 45, 50, 65));
+		private readonly SolidColorBrush[] profileRowOnBgs = new SolidColorBrush[] { new SolidColorBrush(Color.FromRgb(20, 110, 110)), new SolidColorBrush(Color.FromRgb(135, 35, 65)) };
+		private readonly SolidColorBrush dailyRiskPresetOffBg = new SolidColorBrush(Color.FromArgb(128, 45, 50, 65));
+		private readonly SolidColorBrush dailyRiskPresetOnBg = new SolidColorBrush(Color.FromArgb(51, 36, 7, 72));
 
 		private Button CreateButton(string text, Brush bg, RoutedEventHandler handler, double height = 24, double fontSize = 10)
 		{
@@ -55,7 +60,43 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			return btn;
 		}
 
+		private double GetQuickSetFontSize()
+		{
+			double sz = QuickSetFontSize;
+			if (sz < 6) sz = 6;
+			if (sz > 14) sz = 14;
+			if (sz <= 0) sz = 8;
+			return sz;
+		}
+		private static Brush BuildLabelBrush(Brush src, int pct, int defaultPct, byte fallbackAlpha)
+		{
+			try
+			{
+				Brush baseBrush = src ?? Brushes.White;
+				Color baseColor = Colors.White;
+				if (baseBrush is SolidColorBrush scb) baseColor = scb.Color;
+				if (pct == 0) pct = defaultPct;
+				if (pct < 10) pct = 10;
+				if (pct > 100) pct = 100;
+				byte alpha = (byte)(pct * 255 / 100);
+				Color c = Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B);
+				var nb = new SolidColorBrush(c);
+				if (nb.CanFreeze) nb.Freeze();
+				return nb;
+			}
+			catch { var fb = new SolidColorBrush(Color.FromArgb(fallbackAlpha, 255, 255, 255)); if (fb.CanFreeze) fb.Freeze(); return fb; }
+		}
+		private Brush GetQuickSetLabelBrush() => BuildLabelBrush(QuickSetLabelColor, QuickSetLabelOpacityPercent, 50, 128);
+		private Brush GetProgramLabelBrush() => BuildLabelBrush(ProgramLabelColor, ProgramLabelOpacityPercent, 20, 51);
+		private string GetButtonLabel(Button btn)
+		{
+			if (btn == null) return null;
+			if (btn.Content is TextBlock tb) return tb.Text;
+			return btn.Content as string;
+		}
+
 		private static ControlTemplate _hudButtonTemplate;
+		private static ControlTemplate _quickSetButtonTemplate;
 		private static ControlTemplate GetHudButtonTemplate()
 		{
 			if (_hudButtonTemplate != null) return _hudButtonTemplate;
@@ -72,6 +113,32 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			border.AppendChild(cp);
 			_hudButtonTemplate = new ControlTemplate(typeof(Button)) { VisualTree = border };
 			return _hudButtonTemplate;
+		}
+
+		private static ControlTemplate GetQuickSetButtonTemplate()
+		{
+			if (_quickSetButtonTemplate != null) return _quickSetButtonTemplate;
+			var border = new FrameworkElementFactory(typeof(Border), "root");
+			border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding("BorderThickness") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetValue(Border.CornerRadiusProperty, new CornerRadius(3));
+			border.SetValue(Border.SnapsToDevicePixelsProperty, true);
+			border.SetValue(Border.UseLayoutRoundingProperty, true);
+			var tb = new FrameworkElementFactory(typeof(TextBlock), "label");
+			tb.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("Content") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			tb.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			tb.SetBinding(TextBlock.FontSizeProperty, new System.Windows.Data.Binding("FontSize") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			tb.SetBinding(TextBlock.FontWeightProperty, new System.Windows.Data.Binding("FontWeight") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			tb.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+			tb.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+			tb.SetValue(TextBlock.TextAlignmentProperty, TextAlignment.Center);
+			tb.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
+			tb.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
+			tb.SetValue(TextBlock.MarginProperty, new Thickness(1, 0, 1, 0));
+			border.AppendChild(tb);
+			_quickSetButtonTemplate = new ControlTemplate(typeof(Button)) { VisualTree = border };
+			return _quickSetButtonTemplate;
 		}
 
 		private void SetButtonLabel(Button btn, string text)
