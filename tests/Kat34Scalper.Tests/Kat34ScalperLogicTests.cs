@@ -1191,6 +1191,36 @@ public class Kat34ScalperLogicTests
 	}
 
 	[Fact]
+	public void NormalizeProfileName_WithinEight_Kept()
+	{
+		Assert.Equal("P1", Kat34ScalperLogic.NormalizeProfileName("P1", "P8"));
+		Assert.Equal("Scalper1", Kat34ScalperLogic.NormalizeProfileName("Scalper1", "P8"));
+		Assert.Equal("12345678", Kat34ScalperLogic.NormalizeProfileName("12345678", "P8"));
+	}
+
+	[Fact]
+	public void NormalizeProfileName_OverEight_Truncated()
+	{
+		Assert.Equal("12345678", Kat34ScalperLogic.NormalizeProfileName("123456789", "P8"));
+		Assert.Equal("LongName", Kat34ScalperLogic.NormalizeProfileName("LongNameExtended", "P8"));
+	}
+
+	[Fact]
+	public void NormalizeProfileName_EmptyOrWhitespace_FallsBack()
+	{
+		Assert.Equal("P2", Kat34ScalperLogic.NormalizeProfileName("", "P2"));
+		Assert.Equal("P3", Kat34ScalperLogic.NormalizeProfileName("   ", "P3"));
+		Assert.Equal("P4", Kat34ScalperLogic.NormalizeProfileName(null, "P4"));
+	}
+
+	[Fact]
+	public void NormalizeProfileName_SurroundingWhitespace_Trimmed()
+	{
+		Assert.Equal("My Prog", Kat34ScalperLogic.NormalizeProfileName("  My Prog ", "P8"));
+		Assert.Equal("AB", Kat34ScalperLogic.NormalizeProfileName(" AB\n", "P8"));
+	}
+
+	[Fact]
 	public void IsStopOnValidSide_Equality_False()
 	{
 		Assert.False(Kat34ScalperLogic.IsStopOnValidSide(true, 100.0, 100.0));

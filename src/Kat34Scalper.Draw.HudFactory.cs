@@ -28,10 +28,10 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private readonly SolidColorBrush dailyOffBg = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
 		private readonly SolidColorBrush dailyOnBg = CreateFrozenBrush(Color.FromRgb(58, 19, 107));
 		// Program + DailyRisk quick-set style — TradeManager port (transparent vs opaque)
-		private readonly SolidColorBrush profileOffBg = new SolidColorBrush(Color.FromArgb(128, 45, 50, 65));
-		private readonly SolidColorBrush[] profileRowOnBgs = new SolidColorBrush[] { new SolidColorBrush(Color.FromRgb(20, 110, 110)), new SolidColorBrush(Color.FromRgb(135, 35, 65)) };
-		private readonly SolidColorBrush dailyRiskPresetOffBg = new SolidColorBrush(Color.FromArgb(128, 45, 50, 65));
-		private readonly SolidColorBrush dailyRiskPresetOnBg = new SolidColorBrush(Color.FromArgb(51, 36, 7, 72));
+		private readonly SolidColorBrush profileOffBg = CreateFrozenBrush(Color.FromArgb(128, 45, 50, 65));
+		private readonly SolidColorBrush[] profileRowOnBgs = new SolidColorBrush[] { CreateFrozenBrush(Color.FromRgb(20, 110, 110)), CreateFrozenBrush(Color.FromRgb(135, 35, 65)) };
+		private readonly SolidColorBrush dailyRiskPresetOffBg = CreateFrozenBrush(Color.FromArgb(128, 45, 50, 65));
+		private readonly SolidColorBrush dailyRiskPresetOnBg = CreateFrozenBrush(Color.FromArgb(51, 36, 7, 72));
 
 		private Button CreateButton(string text, Brush bg, RoutedEventHandler handler, double height = 24, double fontSize = 10)
 		{

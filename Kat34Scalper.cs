@@ -1,6 +1,6 @@
 /*
  * Kat34Scalper.cs — main module (lifecycle, settings, orchestration)
- * Version: 1.00 (2026-08-08)
+ * Version: 1.01 (2026-08-08)
  * NinjaTrader 8 — EMA 34/89 rejection signal indicator (Sell / Buy).
  *
  * Co-Authored-By: Oz <oz-agent@warp.dev>
@@ -91,7 +91,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 	public partial class Kat34Scalper : Indicator
 	{
 		#region Shared State (owned by main; module-specific state lives in its own file)
-		public const string VERSION = "1.00";
+		public const string VERSION = "1.01";
 		public const string RELEASE_DATE = "2026-08-08";
 
 
@@ -883,6 +883,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile1Name = Kat34ScalperLogic.NormalizeProfileName(value, "P1"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 1 Account", Order = 2, GroupName = "Trading Profile 1")]
 		public string TradingProfile1Account { get; set; }
 		[NinjaScriptProperty]
@@ -920,6 +921,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile2Name = Kat34ScalperLogic.NormalizeProfileName(value, "P2"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 2 Account", Order = 2, GroupName = "Trading Profile 2")]
 		public string TradingProfile2Account { get; set; }
 		[NinjaScriptProperty]
@@ -957,6 +959,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile3Name = Kat34ScalperLogic.NormalizeProfileName(value, "P3"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 3 Account", Order = 2, GroupName = "Trading Profile 3")]
 		public string TradingProfile3Account { get; set; }
 		[NinjaScriptProperty]
@@ -994,6 +997,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile4Name = Kat34ScalperLogic.NormalizeProfileName(value, "P4"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 4 Account", Order = 2, GroupName = "Trading Profile 4")]
 		public string TradingProfile4Account { get; set; }
 		[NinjaScriptProperty]
@@ -1031,6 +1035,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile5Name = Kat34ScalperLogic.NormalizeProfileName(value, "P5"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 5 Account", Order = 2, GroupName = "Trading Profile 5")]
 		public string TradingProfile5Account { get; set; }
 		[NinjaScriptProperty]
@@ -1068,6 +1073,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile6Name = Kat34ScalperLogic.NormalizeProfileName(value, "P6"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 6 Account", Order = 2, GroupName = "Trading Profile 6")]
 		public string TradingProfile6Account { get; set; }
 		[NinjaScriptProperty]
@@ -1105,6 +1111,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile7Name = Kat34ScalperLogic.NormalizeProfileName(value, "P7"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 7 Account", Order = 2, GroupName = "Trading Profile 7")]
 		public string TradingProfile7Account { get; set; }
 		[NinjaScriptProperty]
@@ -1142,6 +1149,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			set { profile8Name = Kat34ScalperLogic.NormalizeProfileName(value, "P8"); }
 		}
 		[NinjaScriptProperty]
+		[TypeConverter(typeof(NinjaTrader.NinjaScript.AccountNameConverter))]
 		[Display(Name = "Profile 8 Account", Order = 2, GroupName = "Trading Profile 8")]
 		public string TradingProfile8Account { get; set; }
 		[NinjaScriptProperty]
