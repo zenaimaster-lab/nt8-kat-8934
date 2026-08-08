@@ -3,6 +3,7 @@
  * Everything visual: signal drawings (entry/SL/TP + ATM BE/SL1/SL2 trigger lines,
  * arrows, labels), the version/timeframe label, alert sounds, and the HUD panel.
  * HUD sections are titled by the module they control: SIGNAL / FILTER / BOT / DRAW.
+ * Redesign v0.95: full TradeManager pixel-perfect port (HudGap 2, HudPanelWidth 250→238 inner, UseLayoutRounding, templates)
  */
 
 #region Using declarations
@@ -326,7 +327,10 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		// Arrow/Text feature removed. No toggle apply needed. Lines always render.
 		#endregion
 
-		#region HUD Panel (sections titled by module: SIGNAL / FILTER / BOT / DRAW)
+		#region HUD Panel — TradeManager pixel-perfect system (HudGap 2, HudPanelWidth 250 → 238 inner)
+		// Design tokens — single source of truth (copy TradeManager HUD Factory verbatim)
+		private const double HudGap = 2;
+		private const double HudPanelWidth = 250; // 250 outer => 238 inner (250-6-6) = 22+24k perfect for gap2 across 2/4/6/8 cols
 		private Border hudBorder;
 		private Canvas hudCanvas;
 		private TextBlock hudStatusText;
@@ -338,15 +342,22 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 		private double hudDragStartLeft;
 		private double hudDragStartTop;
 		private Point hudDragStart;
-		private readonly SolidColorBrush hudOnBrush = new SolidColorBrush(Color.FromRgb(0, 122, 204));
-		private readonly SolidColorBrush hudBotOnBrush = new SolidColorBrush(Color.FromRgb(15, 60, 130)); // Dark blue for BOT Signals
-		private readonly SolidColorBrush hudOffBrush = new SolidColorBrush(Color.FromRgb(45, 50, 65));
 
-		// ATM quick-set buttons (TradeManager pattern: amber ON when its ATM is the current selection)
+		private static SolidColorBrush CreateFrozenBrush(Color c) { var b = new SolidColorBrush(c); if (b.CanFreeze) b.Freeze(); return b; }
+		private readonly SolidColorBrush hudOnBrush = CreateFrozenBrush(Color.FromRgb(0, 122, 204));
+		private readonly SolidColorBrush hudBotOnBrush = CreateFrozenBrush(Color.FromRgb(15, 60, 130));
+		private readonly SolidColorBrush hudOffBrush = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
+		// ATM quick-set buttons — solid OFF gray, amber ON (TradeManager quick-set uses 50%/80% alpha variants for dim)
+		private readonly SolidColorBrush atmSetOffBg = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
+		private readonly SolidColorBrush atmSetOnBg = CreateFrozenBrush(Color.FromRgb(180, 90, 20));
+
+		// --- Account/ATM selectors ---
 		private ComboBox atmComboBox;
 		private Button[] atmSetButtons;
-		private readonly SolidColorBrush atmSetOffBg = new SolidColorBrush(Color.FromRgb(45, 50, 65));
-		private readonly SolidColorBrush atmSetOnBg = new SolidColorBrush(Color.FromRgb(180, 90, 20));
+		private readonly SolidColorBrush dailyOffBg = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
+		private readonly SolidColorBrush dailyOnBg = CreateFrozenBrush(Color.FromRgb(58, 19, 107));
+		private static readonly SolidColorBrush shiftControlBg = CreateFrozenBrush(Color.FromRgb(20, 20, 20));
+		private static readonly SolidColorBrush toggleOffBgStatic = CreateFrozenBrush(Color.FromRgb(45, 50, 65));
 
 		private string GetAtmSetTemplate(int idx)
 		{
@@ -374,7 +385,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			}
 		}
 
-		// Quick-set click: select the assigned ATM immediately (same as picking it from the dropdown).
 		private void ApplyAtmSetSelection(int idx)
 		{
 			string tpl = GetAtmSetTemplate(idx);
@@ -390,7 +400,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				{
 					if (atmComboBox.Items[i].ToString().Equals(tpl, StringComparison.OrdinalIgnoreCase))
 					{
-						atmComboBox.SelectedIndex = i; // dropdown shows it; SelectionChanged sets cachedBotAtm + BotAtmTemplate
+						atmComboBox.SelectedIndex = i;
 						found = true;
 						break;
 					}
@@ -404,8 +414,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			UpdateAtmSetButtons();
 		}
 
-		// Exactly one set button is ON: the one whose assigned ATM equals the current selection.
-		// "None" turns every button OFF.
 		private void UpdateAtmSetButtons()
 		{
 			if (atmSetButtons == null) return;
@@ -419,30 +427,185 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					&& tpl.Equals(cachedBotAtm, StringComparison.OrdinalIgnoreCase);
 				atmSetButtons[i].Background = on ? atmSetOnBg : atmSetOffBg;
 				atmSetButtons[i].Foreground = on ? Brushes.White : Brushes.LightGray;
+				// sync TextBlock foreground after background flip
+				if (atmSetButtons[i].Content is TextBlock tb) tb.Foreground = atmSetButtons[i].Foreground;
 			}
 		}
 
-		// --- TradeManager-style HUD helpers (same colors, sizes and structure) ---
-		private Button CreateHudButton(string text, Brush bg, RoutedEventHandler handler, double height = 24, double fontSize = 10)
+		// --- TradeManager-style HUD factory (verbatim copy: HudFactory.cs) ---
+		private Button CreateButton(string text, Brush bg, RoutedEventHandler handler, double height = 24, double fontSize = 10)
 		{
+			var tb = new TextBlock { Text = text, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap, Margin = new Thickness(0), Padding = new Thickness(0) };
 			Button btn = new Button
 			{
-				Content = text,
+				Content = tb,
 				Background = bg,
 				Foreground = Brushes.White,
 				FontWeight = FontWeights.Normal,
 				FontSize = fontSize,
 				Margin = new Thickness(0),
-				Padding = new Thickness(2),
+				Padding = new Thickness(2, 0, 2, 0),
 				Height = height,
-				BorderThickness = new Thickness(0)
+				BorderThickness = new Thickness(0),
+				HorizontalContentAlignment = HorizontalAlignment.Center,
+				VerticalContentAlignment = VerticalAlignment.Center,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Center,
+				Template = GetHudButtonTemplate(),
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			};
 			if (handler != null)
 				btn.Click += handler;
 			return btn;
 		}
 
-		// Small caps title naming the module the section below controls.
+		private static ControlTemplate _hudButtonTemplate;
+		private static ControlTemplate GetHudButtonTemplate()
+		{
+			if (_hudButtonTemplate != null) return _hudButtonTemplate;
+			var border = new FrameworkElementFactory(typeof(Border), "root");
+			border.SetBinding(Border.BackgroundProperty, new System.Windows.Data.Binding("Background") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetBinding(Border.BorderBrushProperty, new System.Windows.Data.Binding("BorderBrush") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetBinding(Border.BorderThicknessProperty, new System.Windows.Data.Binding("BorderThickness") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			border.SetValue(Border.SnapsToDevicePixelsProperty, true);
+			border.SetValue(Border.UseLayoutRoundingProperty, true);
+			var cp = new FrameworkElementFactory(typeof(ContentPresenter));
+			cp.SetBinding(ContentPresenter.HorizontalAlignmentProperty, new System.Windows.Data.Binding("HorizontalContentAlignment") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			cp.SetBinding(ContentPresenter.VerticalAlignmentProperty, new System.Windows.Data.Binding("VerticalContentAlignment") { RelativeSource = new System.Windows.Data.RelativeSource(System.Windows.Data.RelativeSourceMode.TemplatedParent) });
+			cp.SetValue(ContentPresenter.MarginProperty, new Thickness(2, 0, 2, 0));
+			border.AppendChild(cp);
+			_hudButtonTemplate = new ControlTemplate(typeof(Button)) { VisualTree = border };
+			return _hudButtonTemplate;
+		}
+
+		private void SetButtonLabel(Button btn, string text)
+		{
+			if (btn == null) return;
+			if (btn.Content is TextBlock tb)
+			{
+				if (tb.Text != text) tb.Text = text;
+				tb.TextAlignment = TextAlignment.Center;
+				tb.HorizontalAlignment = HorizontalAlignment.Center;
+				tb.VerticalAlignment = VerticalAlignment.Center;
+				tb.TextTrimming = TextTrimming.CharacterEllipsis;
+				tb.TextWrapping = TextWrapping.NoWrap;
+				try { if (btn.Foreground != null) tb.Foreground = btn.Foreground; } catch {}
+				try { if (btn.FontSize > 0) tb.FontSize = btn.FontSize; } catch {}
+				tb.Margin = new Thickness(0);
+				tb.Padding = new Thickness(0);
+			}
+			else if (btn.Content is StackPanel) { return; }
+			else
+			{
+				var nTb = new TextBlock { Text = text, TextAlignment = TextAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap, Margin = new Thickness(0), Padding = new Thickness(0) };
+				try { if (btn.Foreground != null) nTb.Foreground = btn.Foreground; } catch {}
+				try { if (btn.FontSize > 0) nTb.FontSize = btn.FontSize; } catch {}
+				btn.Content = nTb;
+			}
+			btn.HorizontalContentAlignment = HorizontalAlignment.Center;
+			btn.VerticalContentAlignment = VerticalAlignment.Center;
+			btn.Padding = new Thickness(2, 0, 2, 0);
+		}
+
+		private Grid CreateTwoColumnGrid(double bottomMargin = 2, double centerGap = 2)
+		{
+			Grid grid = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin), HorizontalAlignment = HorizontalAlignment.Stretch, UseLayoutRounding = true, SnapsToDevicePixels = true };
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(centerGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			return grid;
+		}
+
+		private Grid CreateFourColumnGrid(double bottomMargin = 2, double centerGap = 2, double subGap = 2)
+		{
+			Grid grid = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin), HorizontalAlignment = HorizontalAlignment.Stretch, UseLayoutRounding = true, SnapsToDevicePixels = true };
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(centerGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			return grid;
+		}
+
+		private Grid CreateSixColumnGrid(double bottomMargin = 2, double centerGap = 2, double subGap = 2)
+		{
+			Grid grid = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin), HorizontalAlignment = HorizontalAlignment.Stretch, UseLayoutRounding = true, SnapsToDevicePixels = true };
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(centerGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			return grid;
+		}
+
+		private Grid CreateEightColumnGrid(double bottomMargin = 2, double centerGap = 2, double subGap = 2)
+		{
+			Grid grid = new Grid { Margin = new Thickness(0, 0, 0, bottomMargin), HorizontalAlignment = HorizontalAlignment.Stretch, UseLayoutRounding = true, SnapsToDevicePixels = true };
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(centerGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(subGap) });
+			grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+			return grid;
+		}
+
+		private Border CreateSectionCard(FrameworkElement child, double bottomMargin = 2)
+		{
+			var contentHost = new Border
+			{
+				Padding = new Thickness(HudGap),
+				Background = Brushes.Transparent,
+				Child = child,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
+			};
+			var footer = new Border
+			{
+				Height = 6,
+				Background = new SolidColorBrush(Color.FromRgb(0, 0, 0)),
+				CornerRadius = new CornerRadius(0, 0, 4, 4),
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
+			};
+			var inner = new Grid { UseLayoutRounding = true, SnapsToDevicePixels = true };
+			inner.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+			inner.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
+			Grid.SetRow(contentHost, 0);
+			Grid.SetRow(footer, 1);
+			inner.Children.Add(contentHost);
+			inner.Children.Add(footer);
+			return new Border
+			{
+				Background = new SolidColorBrush(Color.FromRgb(10, 12, 18)),
+				BorderBrush = new SolidColorBrush(Color.FromRgb(35, 42, 56)),
+				BorderThickness = new Thickness(1),
+				CornerRadius = new CornerRadius(5),
+				Margin = new Thickness(0, 0, 0, bottomMargin),
+				Child = inner,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
+			};
+		}
+
 		private TextBlock CreateModuleTitle(string text)
 		{
 			return new TextBlock
@@ -451,68 +614,25 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				Foreground = new SolidColorBrush(Color.FromRgb(110, 120, 145)),
 				FontWeight = FontWeights.Bold,
 				FontSize = 10,
-				Margin = new Thickness(2, 0, 0, 3)
+				Margin = new Thickness(2, 0, 0, HudGap),
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			};
-		}
-
-		private Border CreateSectionCard(FrameworkElement child, double bottomMargin)
-		{
-			return new Border
-			{
-				Background = new SolidColorBrush(Color.FromRgb(10, 12, 18)),
-				BorderBrush = new SolidColorBrush(Color.FromRgb(35, 42, 56)),
-				BorderThickness = new Thickness(1),
-				CornerRadius = new CornerRadius(5),
-				Padding = new Thickness(6),
-				Margin = new Thickness(0, 0, 0, bottomMargin),
-				Child = child
-			};
-		}
-
-		private Grid CreateTwoColGrid()
-		{
-			Grid g = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-			g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-			g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			return g;
-		}
-
-		private void AddGridRow(Grid grid, string labelText, FrameworkElement input)
-		{
-			int rowIdx = grid.RowDefinitions.Count;
-			grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
-			TextBlock label = new TextBlock
-			{
-				Text = labelText,
-				Foreground = Brushes.LightGray,
-				VerticalAlignment = VerticalAlignment.Center,
-				FontSize = 11
-			};
-			Grid.SetRow(label, rowIdx);
-			Grid.SetColumn(label, 0);
-			grid.Children.Add(label);
-
-			input.VerticalAlignment = VerticalAlignment.Center;
-			input.HorizontalAlignment = HorizontalAlignment.Stretch;
-			input.Height = 22;
-			Grid.SetRow(input, rowIdx);
-			Grid.SetColumn(input, 1);
-			grid.Children.Add(input);
 		}
 
 		private Button CreateFilterToggle(string label, Func<bool> getter, Action<bool> setter, double height = 24, double fontSize = 10, Brush activeBrush = null)
 		{
 			Brush onBrush = activeBrush ?? hudOnBrush;
-			Button btn = CreateHudButton(label, getter() ? onBrush : hudOffBrush, null, height, fontSize);
+			Button btn = CreateButton(label, getter() ? onBrush : hudOffBrush, null, height, fontSize);
 			btn.Foreground = getter() ? Brushes.White : Brushes.LightGray;
 			btn.Click += (s, e) =>
 			{
 				setter(!getter());
 				bool on = getter();
-				btn.Content = label;
+				SetButtonLabel(btn, label);
 				btn.Background = on ? onBrush : hudOffBrush;
 				btn.Foreground = on ? Brushes.White : Brushes.LightGray;
+				if (btn.Content is TextBlock tb) tb.Foreground = btn.Foreground;
 			};
 			return btn;
 		}
@@ -545,7 +665,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			else ChartControl.Dispatcher.BeginInvoke(update);
 		}
 
-		// --- HUD drag (TradeManager pattern: capture on the border, clamp ≥40px visible, skip interactive controls) ---
+		// --- HUD drag (TradeManager pattern: clamp ≥40px visible, skip interactive controls) ---
 		private static DependencyObject GetHudParent(DependencyObject element)
 		{
 			if (element == null) return null;
@@ -607,8 +727,8 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			Point cur = e.GetPosition(hudCanvas);
 			double newLeft = hudDragStartLeft + (cur.X - hudDragStart.X);
 			double newTop = hudDragStartTop + (cur.Y - hudDragStart.Y);
-			const double minVisible = 40; // never drag the panel off-screen
-			double panelW = hudBorder.ActualWidth > 0 ? hudBorder.ActualWidth : 240;
+			const double minVisible = 40;
+			double panelW = hudBorder.ActualWidth > 0 ? hudBorder.ActualWidth : HudPanelWidth;
 			double panelH = hudBorder.ActualHeight > 0 ? hudBorder.ActualHeight : 40;
 			newLeft = Math.Min(Math.Max(newLeft, minVisible - panelW), Math.Max(0, hudCanvas.ActualWidth - minVisible));
 			newTop = Math.Min(Math.Max(newTop, minVisible - panelH), Math.Max(0, hudCanvas.ActualHeight - minVisible));
@@ -658,8 +778,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 
 		private void BuildHud()
 		{
-			// Attach to the outer grid (ChartControl.Parent), never ChartControl itself —
-			// ChartControl lays out the price panel and a child would squeeze it (side gaps).
 			Grid host = ChartControl != null ? ChartControl.Parent as Grid : null;
 			if (hudBorder != null || host == null) return;
 
@@ -667,7 +785,9 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			{
 				HorizontalAlignment = HorizontalAlignment.Stretch,
 				VerticalAlignment = VerticalAlignment.Stretch,
-				ClipToBounds = false
+				ClipToBounds = false,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			};
 			System.Windows.Controls.Panel.SetZIndex(hudCanvas, 9999);
 			host.Children.Add(hudCanvas);
@@ -679,11 +799,14 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				BorderBrush = new SolidColorBrush(Color.FromRgb(35, 42, 56)),
 				BorderThickness = new Thickness(1),
 				CornerRadius = new CornerRadius(6),
-				Padding = new Thickness(8),
-				Width = 240,
+				Padding = new Thickness(HudGap),
+				Margin = new Thickness(HudGap),
+				Width = HudPanelWidth,
 				HorizontalAlignment = HorizontalAlignment.Left,
 				VerticalAlignment = VerticalAlignment.Top,
-				Cursor = Cursors.SizeAll
+				Cursor = Cursors.SizeAll,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			};
 			hudCanvas.Children.Add(hudBorder);
 			Canvas.SetLeft(hudBorder, hasHudDragPosition ? hudDragLeft : 10);
@@ -695,36 +818,65 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			};
 			AttachHudDragHandlers();
 
-			var mainPanel = new StackPanel();
+			var mainPanel = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
 
+			// Header — TradeManager style: Normal 12, Opacity 0.3, HudGap*2 breathing
 			mainPanel.Children.Add(new TextBlock
 			{
 				Text = string.Format("⚡ KAT 34-ScalperBot v{0}", VERSION),
 				Foreground = new SolidColorBrush(Color.FromRgb(70, 130, 160)),
-				FontWeight = FontWeights.Bold,
+				FontWeight = FontWeights.Normal,
 				FontSize = 12,
-				Margin = new Thickness(0, 0, 0, 6),
-				HorizontalAlignment = HorizontalAlignment.Left
+				Margin = new Thickness(0, HudGap * 2, 0, HudGap * 2),
+				HorizontalAlignment = HorizontalAlignment.Left,
+				Opacity = 0.3,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			});
 
 			hudStatusText = new TextBlock
 			{
+				Background = Brushes.Transparent,
 				Foreground = Brushes.White,
 				FontSize = 10,
-				Margin = new Thickness(0, 0, 0, 6),
+				Margin = new Thickness(0, 0, 0, HudGap),
 				Height = 16,
 				MinHeight = 16,
 				MaxHeight = 16,
 				TextTrimming = TextTrimming.CharacterEllipsis,
 				TextWrapping = TextWrapping.NoWrap,
-				Text = string.Empty
+				HorizontalAlignment = HorizontalAlignment.Left,
+				VerticalAlignment = VerticalAlignment.Top,
+				Text = string.Empty,
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true
 			};
+			// status lives inside mainPanel but above first card (TradeManager sec1Panel pattern isolates it inside card;
+			// Scalper keeps it above secBot card for immediate visibility without extra nesting)
+			// To match TradeManager exactly: create sec1-like card that hosts status + BOT controls
+			// Instead we keep status as separate element above cards for cleaner HUD, but with HudGap margin
 			mainPanel.Children.Add(hudStatusText);
 
-			// --- BOT module: account, ATM template, BOT on/off ---
-			var secBot = new StackPanel();
+			// --- BOT card: account, ATM template, quick-sets, BOT toggle, market/BE/Revert/Close, Daily Risk ---
+			var secBot = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
 
-			var accCombo = new ComboBox { FontSize = 11, Height = 22, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 4) };
+			var accCombo = new ComboBox
+			{
+				FontSize = 11,
+				Height = 22,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Center,
+				VerticalContentAlignment = VerticalAlignment.Center,
+				HorizontalContentAlignment = HorizontalAlignment.Left,
+				Padding = new Thickness(4, 0, 0, 0),
+				Margin = new Thickness(0, 0, 0, HudGap),
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true,
+				Background = new SolidColorBrush(Color.FromRgb(0, 0, 0)),
+				Foreground = Brushes.White,
+				BorderBrush = new SolidColorBrush(Color.FromRgb(35, 42, 56)),
+				BorderThickness = new Thickness(1)
+			};
 			if (Account.All != null)
 				foreach (Account acc in Account.All)
 					accCombo.Items.Add(acc.Name);
@@ -732,7 +884,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				if (accCombo.Items[i].ToString().Equals(cachedBotAccountName, StringComparison.OrdinalIgnoreCase))
 					accCombo.SelectedIndex = i;
 			if (accCombo.SelectedIndex < 0 && accCombo.Items.Count > 0) accCombo.SelectedIndex = 0;
-			// Default to SIM101 if present (per user rule)
 			int simIdx = -1;
 			for (int i = 0; i < accCombo.Items.Count; i++)
 				if (accCombo.Items[i].ToString().Equals("SIM101", StringComparison.OrdinalIgnoreCase)) { simIdx = i; break; }
@@ -749,12 +900,25 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 				if (accCombo.SelectedItem == null) return;
 				cachedBotAccountName = accCombo.SelectedItem.ToString();
 				BotAccountName = cachedBotAccountName;
-				// NT8 only renders chart orders for the account selected in Chart Trader — mirror the pick there.
 				SyncChartTraderAccount(cachedBotAccountName);
 			};
 			secBot.Children.Add(accCombo);
 
-			atmComboBox = new ComboBox { FontSize = 11, Height = 22, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 0, 0, 4) };
+			atmComboBox = new ComboBox
+			{
+				FontSize = 11,
+				Height = 22,
+				HorizontalAlignment = HorizontalAlignment.Stretch,
+				VerticalAlignment = VerticalAlignment.Center,
+				VerticalContentAlignment = VerticalAlignment.Center,
+				Margin = new Thickness(0, 0, 0, HudGap),
+				UseLayoutRounding = true,
+				SnapsToDevicePixels = true,
+				Background = new SolidColorBrush(Color.FromRgb(0, 0, 0)),
+				Foreground = Brushes.White,
+				BorderBrush = new SolidColorBrush(Color.FromRgb(35, 42, 56)),
+				BorderThickness = new Thickness(1)
+			};
 			atmComboBox.Items.Add("None");
 			try
 			{
@@ -764,7 +928,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					var names = new List<string>();
 					foreach (string f in Directory.GetFiles(atmDir, "*.xml"))
 						names.Add(Path.GetFileNameWithoutExtension(f));
-					names.Sort(StringComparer.OrdinalIgnoreCase); // filesystem order is not deterministic
+					names.Sort(StringComparer.OrdinalIgnoreCase);
 					foreach (string n in names) atmComboBox.Items.Add(n);
 				}
 			}
@@ -772,7 +936,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			for (int i = 0; i < atmComboBox.Items.Count; i++)
 				if (atmComboBox.Items[i].ToString().Equals(cachedBotAtm, StringComparison.OrdinalIgnoreCase))
 					atmComboBox.SelectedIndex = i;
-			// Force default mnq 1ct template display if present (per user rule)
 			const string mnq1ct = "mnq. 1ct. 15-be20-35move15-50triggertrail5step1";
 			int mnqIdx = -1;
 			for (int i = 0; i < atmComboBox.Items.Count; i++)
@@ -793,20 +956,15 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			};
 			secBot.Children.Add(atmComboBox);
 
-			// ATM quick-set row: 6 equal buttons; click selects the ATM assigned in settings (TradeManager style)
+			// ATM quick-sets: 6 buttons in single row — HudGap uniform, height 22 TradeManager style
 			atmSetButtons = new Button[6];
-			Grid atmSetGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-			for (int col = 0; col < 6; col++)
-			{
-				atmSetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-				if (col < 5)
-					atmSetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2) });
-			}
+			Grid atmSetGrid = CreateSixColumnGrid(HudGap, HudGap, HudGap);
 			for (int setIdx = 0; setIdx < 6; setIdx++)
 			{
 				int capturedIdx = setIdx;
-				Button setBtn = CreateHudButton(GetAtmSetName(setIdx), atmSetOffBg, null, 22, 10);
+				Button setBtn = CreateButton(GetAtmSetName(setIdx), atmSetOffBg, null, 22, 10);
 				setBtn.Foreground = Brushes.LightGray;
+				if (setBtn.Content is TextBlock tb) tb.Foreground = Brushes.LightGray;
 				setBtn.Click += (s, ev) => ApplyAtmSetSelection(capturedIdx);
 				Grid.SetColumn(setBtn, setIdx * 2);
 				atmSetButtons[setIdx] = setBtn;
@@ -815,16 +973,19 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			secBot.Children.Add(atmSetGrid);
 			UpdateAtmSetButtons();
 
-			Button btnBot = CreateHudButton(cachedBotOn ? "⚡ BOT: ON" : "BOT: OFF", cachedBotOn ? hudOnBrush : hudOffBrush, null, 26, 11);
+			// BOT ON/OFF — toggle height 24 (sec4 uniform), font 11, full-width
+			Button btnBot = CreateButton(cachedBotOn ? "⚡ BOT: ON" : "BOT: OFF", cachedBotOn ? hudOnBrush : hudOffBrush, null, 24, 11);
 			btnBot.Foreground = cachedBotOn ? Brushes.White : Brushes.LightGray;
-			btnBot.Margin = new Thickness(0);
+			if (btnBot.Content is TextBlock tbb) tbb.Foreground = btnBot.Foreground;
+			btnBot.Margin = new Thickness(0, 0, 0, 0);
 			btnBot.Click += (s, e) =>
 			{
 				cachedBotOn = !cachedBotOn;
 				BotEnabled = cachedBotOn;
-				btnBot.Content = cachedBotOn ? "⚡ BOT: ON" : "BOT: OFF";
+				SetButtonLabel(btnBot, cachedBotOn ? "⚡ BOT: ON" : "BOT: OFF");
 				btnBot.Background = cachedBotOn ? hudOnBrush : hudOffBrush;
 				btnBot.Foreground = cachedBotOn ? Brushes.White : Brushes.LightGray;
+				if (btnBot.Content is TextBlock tb2) tb2.Foreground = btnBot.Foreground;
 				if (cachedBotOn)
 					ShowHudStatus("BOT ON — every signal switched ON auto-submits entries", Brushes.LightGreen);
 				else
@@ -839,138 +1000,107 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			};
 			secBot.Children.Add(btnBot);
 
-			// --- Market Orders (SELL market / BUY market) & Position Management (BE / Revert) ---
-			Grid mktBtnGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-			mktBtnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			mktBtnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
-			mktBtnGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-			SolidColorBrush buyMktBg  = new SolidColorBrush(Color.FromRgb(12, 48, 25)); // Deep dark green (#0C3019)
-			SolidColorBrush sellMktBg = new SolidColorBrush(Color.FromRgb(55, 15, 18)); // Deep dark red (#370F12)
-
-			Button btnSellMkt = CreateHudButton("SELL market", sellMktBg, null, 48, 12);
+			// Market orders — 2-col grid, height 43 TradeManager primary (was 48), HudGap gaps
+			Grid mktBtnGrid = CreateTwoColumnGrid(HudGap, HudGap);
+			SolidColorBrush buyMktBg  = CreateFrozenBrush(Color.FromRgb(12, 48, 25));
+			SolidColorBrush sellMktBg = CreateFrozenBrush(Color.FromRgb(55, 15, 18));
+			Button btnSellMkt = CreateButton("SELL MARKET", sellMktBg, null, 43, 12);
 			btnSellMkt.Click += (s, ev) => TriggerCustomEvent(o => { PlaceMarketOrder(OrderAction.Sell); }, null);
 			Grid.SetColumn(btnSellMkt, 0);
 			mktBtnGrid.Children.Add(btnSellMkt);
-
-			Button btnBuyMkt = CreateHudButton("BUY market", buyMktBg, null, 48, 12);
+			Button btnBuyMkt = CreateButton("BUY MARKET", buyMktBg, null, 43, 12);
 			btnBuyMkt.Click += (s, ev) => TriggerCustomEvent(o => { PlaceMarketOrder(OrderAction.Buy); }, null);
 			Grid.SetColumn(btnBuyMkt, 2);
 			mktBtnGrid.Children.Add(btnBuyMkt);
-
 			secBot.Children.Add(mktBtnGrid);
 
-			Grid beRevertGrid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-			beRevertGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			beRevertGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
-			beRevertGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-			SolidColorBrush beBg     = new SolidColorBrush(Color.FromRgb(14, 48, 62)); // Deep dark slate teal (#0E303E)
-			SolidColorBrush revertBg = new SolidColorBrush(Color.FromRgb(75, 42, 10)); // Deep dark amber (#4B2A0A)
-
-			Button btnBE = CreateHudButton("BE", beBg, null, 33, 12);
-			btnBE.Click += (s, ev) => TriggerCustomEvent(o => { SetBreakeven(); }, null);
-			Grid.SetColumn(btnBE, 0);
-			beRevertGrid.Children.Add(btnBE);
-
-			Button btnRevert = CreateHudButton("Revert", revertBg, null, 33, 12);
+			Grid beRevertGrid = CreateTwoColumnGrid(HudGap, HudGap);
+			SolidColorBrush beBg     = CreateFrozenBrush(Color.FromRgb(22, 22, 22));
+			SolidColorBrush revertBg = CreateFrozenBrush(Color.FromRgb(22, 22, 22));
+			Button btnRevert = CreateButton("Revert", revertBg, null, 43, 12);
 			btnRevert.Click += (s, ev) => TriggerCustomEvent(o => { RevertPosition(); }, null);
-			Grid.SetColumn(btnRevert, 2);
+			Grid.SetColumn(btnRevert, 0);
 			beRevertGrid.Children.Add(btnRevert);
-
+			Button btnBE = CreateButton("Break Even", beBg, null, 43, 12);
+			btnBE.Click += (s, ev) => TriggerCustomEvent(o => { SetBreakeven(); }, null);
+			Grid.SetColumn(btnBE, 2);
+			beRevertGrid.Children.Add(btnBE);
 			secBot.Children.Add(beRevertGrid);
 
-			SolidColorBrush closeBg = new SolidColorBrush(Color.FromRgb(20, 20, 20)); // Very dark gray (almost black)
-			Button btnClose = CreateHudButton("Close/flatten", closeBg, null, 66, 15);
+			SolidColorBrush closeBg = CreateFrozenBrush(Color.FromRgb(10, 10, 10));
+			Button btnClose = CreateButton("Close/flatten", closeBg, null, 59, 15);
 			btnClose.Margin = new Thickness(0, 0, 0, 0);
-			btnClose.Click += (s, ev) =>
-			{
-				TriggerCustomEvent(o =>
-				{
-					FlattenAllPositions();
-				}, null);
-			};
+			btnClose.Click += (s, ev) => TriggerCustomEvent(o => { FlattenAllPositions(); }, null);
 			secBot.Children.Add(btnClose);
 
-			// --- Daily Max DD & Daily Max Profit toggle buttons (side-by-side below BOT ON/OFF, TradeManager style) ---
-			Grid dailyRiskGrid = new Grid { Margin = new Thickness(0, 4, 0, 0) };
-			dailyRiskGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-			dailyRiskGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
-			dailyRiskGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-			SolidColorBrush dailyOffBg = new SolidColorBrush(Color.FromRgb(45, 50, 65));
-			SolidColorBrush dailyOnBg  = new SolidColorBrush(Color.FromRgb(58, 19, 107)); // Darker purple (#3A136B)
-
-			Button btnDailyMaxDD = CreateHudButton(cachedIsDailyMaxDD ? "Max DD: ON" : "Max DD: OFF",
+			// Daily Max DD & Daily Max Profit — shared 6-col base for pixel-perfect center (TradeManager sec4 pattern)
+			Grid dailyRiskGrid = CreateSixColumnGrid(0, HudGap, HudGap);
+			Button btnDailyMaxDD = CreateButton(cachedIsDailyMaxDD ? "Max DD: ON" : "Max DD: OFF",
 				cachedIsDailyMaxDD ? dailyOnBg : dailyOffBg, null, 24, 10);
 			btnDailyMaxDD.Foreground = cachedIsDailyMaxDD ? Brushes.White : Brushes.LightGray;
-
+			if (btnDailyMaxDD.Content is TextBlock tbd) tbd.Foreground = btnDailyMaxDD.Foreground;
 			btnDailyMaxDD.Click += (s, ev) =>
 			{
 				cachedIsDailyMaxDD = !cachedIsDailyMaxDD;
 				DailyMaxDDEnabled = cachedIsDailyMaxDD;
-				btnDailyMaxDD.Content = cachedIsDailyMaxDD ? "Max DD: ON" : "Max DD: OFF";
+				SetButtonLabel(btnDailyMaxDD, cachedIsDailyMaxDD ? "Max DD: ON" : "Max DD: OFF");
 				btnDailyMaxDD.Background = cachedIsDailyMaxDD ? dailyOnBg : dailyOffBg;
 				btnDailyMaxDD.Foreground = cachedIsDailyMaxDD ? Brushes.White : Brushes.LightGray;
-
+				if (btnDailyMaxDD.Content is TextBlock tbx) tbx.Foreground = btnDailyMaxDD.Foreground;
 				if (IsDailyRiskBreached(out string breachReason))
 				{
 					ShowHudStatus(breachReason, Brushes.OrangeRed);
 					TriggerCustomEvent(o => { CancelPendingBotOrder(breachReason); }, null);
 				}
 				else
-				{
 					ShowHudStatus("Daily Max DD: " + (cachedIsDailyMaxDD ? "ON ($" + cachedDailyMaxDD + ")" : "OFF"), Brushes.LightGreen);
-				}
 			};
 			Grid.SetColumn(btnDailyMaxDD, 0);
+			Grid.SetColumnSpan(btnDailyMaxDD, 5);
 			dailyRiskGrid.Children.Add(btnDailyMaxDD);
 
-			Button btnDailyMaxProfit = CreateHudButton(cachedIsDailyMaxProfit ? "Max Profit: ON" : "Max Profit: OFF",
+			Button btnDailyMaxProfit = CreateButton(cachedIsDailyMaxProfit ? "Max Profit: ON" : "Max Profit: OFF",
 				cachedIsDailyMaxProfit ? dailyOnBg : dailyOffBg, null, 24, 10);
 			btnDailyMaxProfit.Foreground = cachedIsDailyMaxProfit ? Brushes.White : Brushes.LightGray;
-
+			if (btnDailyMaxProfit.Content is TextBlock tbp) tbp.Foreground = btnDailyMaxProfit.Foreground;
 			btnDailyMaxProfit.Click += (s, ev) =>
 			{
 				cachedIsDailyMaxProfit = !cachedIsDailyMaxProfit;
 				DailyMaxProfitEnabled = cachedIsDailyMaxProfit;
-				btnDailyMaxProfit.Content = cachedIsDailyMaxProfit ? "Max Profit: ON" : "Max Profit: OFF";
+				SetButtonLabel(btnDailyMaxProfit, cachedIsDailyMaxProfit ? "Max Profit: ON" : "Max Profit: OFF");
 				btnDailyMaxProfit.Background = cachedIsDailyMaxProfit ? dailyOnBg : dailyOffBg;
 				btnDailyMaxProfit.Foreground = cachedIsDailyMaxProfit ? Brushes.White : Brushes.LightGray;
-
+				if (btnDailyMaxProfit.Content is TextBlock tbq) tbq.Foreground = btnDailyMaxProfit.Foreground;
 				if (IsDailyRiskBreached(out string breachReason))
 				{
 					ShowHudStatus(breachReason, Brushes.OrangeRed);
 					TriggerCustomEvent(o => { CancelPendingBotOrder(breachReason); }, null);
 				}
 				else
-				{
 					ShowHudStatus("Daily Max Profit: " + (cachedIsDailyMaxProfit ? "ON ($" + cachedDailyMaxProfit + ")" : "OFF"), Brushes.LightGreen);
-				}
 			};
-			Grid.SetColumn(btnDailyMaxProfit, 2);
+			Grid.SetColumn(btnDailyMaxProfit, 6);
+			Grid.SetColumnSpan(btnDailyMaxProfit, 5);
 			dailyRiskGrid.Children.Add(btnDailyMaxProfit);
-
 			secBot.Children.Add(dailyRiskGrid);
-			mainPanel.Children.Add(CreateSectionCard(secBot, 6));
 
-			// --- ALERT SIGNAL module: independent alert-only sub-modules ---
+			mainPanel.Children.Add(CreateSectionCard(secBot, HudGap));
+
+			// --- ALERT SIGNAL card: A2 ---
 			mainPanel.Children.Add(CreateModuleTitle("ALERT SIGNAL"));
-			var secAlert = new StackPanel();
-			Grid aRow = CreateTwoColGrid();
-			aRow.Margin = new Thickness(0);
+			var secAlert = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
 			Button btnAlertA2 = CreateFilterToggle("A2", () => cachedAlertA2, v => SetAlertA2Signal(v));
-			Grid.SetColumn(btnAlertA2, 0);
-			aRow.Children.Add(btnAlertA2);
-			secAlert.Children.Add(aRow);
-			mainPanel.Children.Add(CreateSectionCard(secAlert, 6));
+			// single toggle full-width: wrap in grid with single star centered? Use full-width button directly
+			// For pixel parity with 2-col cards, use 6-col base with Span11 full-width
+			Grid aGrid = CreateTwoColumnGrid(0, HudGap);
+			// Span both stars + gap: replace grid with single button full-width for simplicity — stack will stretch
+			secAlert.Children.Add(btnAlertA2);
+			mainPanel.Children.Add(CreateSectionCard(secAlert, HudGap));
 
-			// --- BOT SIGNAL module: independent sub-module toggles ---
-			// ON backfills the module's History Days window immediately; OFF removes only that module's drawings.
+			// --- BOT SIGNAL card: B1 + B2 in 2-col grid, dark-blue ON ---
 			mainPanel.Children.Add(CreateModuleTitle("BOT SIGNAL"));
-			var secSignal = new StackPanel();
-			Grid sRow = CreateTwoColGrid();
-			sRow.Margin = new Thickness(0);
+			var secSignal = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
+			Grid sRow = CreateTwoColumnGrid(0, HudGap);
 			Button btnB1 = CreateFilterToggle("B1 (34bounce8+)", () => cachedB1, v => SetB1Signal(v), 24, 10, hudBotOnBrush);
 			Grid.SetColumn(btnB1, 0);
 			sRow.Children.Add(btnB1);
@@ -978,27 +1108,26 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			Grid.SetColumn(btnB2, 2);
 			sRow.Children.Add(btnB2);
 			secSignal.Children.Add(sRow);
-			mainPanel.Children.Add(CreateSectionCard(secSignal, 6));
+			mainPanel.Children.Add(CreateSectionCard(secSignal, HudGap));
 
-			// --- BOT FILTER module: the only filter side since v0.79 (ALERT FILTER removed; A1 is a
-			// pure fan). Gates B1/B2 — and the A2 alert placeholder — via PassFilters/PassFiltersAt.
+			// --- BOT FILTER card: 3 rows x 2 cols, all toggle height 24 uniform ---
 			mainPanel.Children.Add(CreateModuleTitle("BOT FILTER"));
-			var secBotFilter = new StackPanel();
-			Grid bfRow1 = CreateTwoColGrid();
+			var secBotFilter = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
+			Grid bfRow1 = CreateTwoColumnGrid(HudGap, HudGap);
 			Button tAdxRise = CreateFilterToggle("ADX rising", () => cachedAdxRise, v => cachedAdxRise = v);
 			Grid.SetColumn(tAdxRise, 0);
 			bfRow1.Children.Add(tAdxRise);
 			Button tAdxMtf = CreateFilterToggle("ADX MTF", () => cachedAdxMtf, v => cachedAdxMtf = v);
 			Grid.SetColumn(tAdxMtf, 2);
 			bfRow1.Children.Add(tAdxMtf);
-			Grid bfRow2 = CreateTwoColGrid();
+			Grid bfRow2 = CreateTwoColumnGrid(HudGap, HudGap);
 			Button tEr = CreateFilterToggle("ER (trend)", () => cachedEr, v => cachedEr = v);
 			Grid.SetColumn(tEr, 0);
 			bfRow2.Children.Add(tEr);
 			Button tCi = CreateFilterToggle("CI (chop)", () => cachedCi, v => cachedCi = v);
 			Grid.SetColumn(tCi, 2);
 			bfRow2.Children.Add(tCi);
-			Grid bfRow3 = CreateTwoColGrid();
+			Grid bfRow3 = CreateTwoColumnGrid(0, HudGap);
 			Button tVol = CreateFilterToggle("Volume", () => cachedVol, v => cachedVol = v);
 			Grid.SetColumn(tVol, 0);
 			bfRow3.Children.Add(tVol);
@@ -1008,13 +1137,14 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			secBotFilter.Children.Add(bfRow1);
 			secBotFilter.Children.Add(bfRow2);
 			secBotFilter.Children.Add(bfRow3);
-			mainPanel.Children.Add(CreateSectionCard(secBotFilter, 6));
+			mainPanel.Children.Add(CreateSectionCard(secBotFilter, HudGap));
 
-			// --- DRAW module: Clear removes all drawings from this HUD (signals + A0 + A1 stages) ---
+			// --- DRAW card: Clear full-width, height 24 toggle size (was 24) ---
 			mainPanel.Children.Add(CreateModuleTitle("DRAW"));
-			var secDraw = new StackPanel();
-			Button btnClear = CreateHudButton("Clear", new SolidColorBrush(Color.FromRgb(20, 20, 20)),
-				(s, e) => TriggerCustomEvent(o => ClearOldSignalDrawings(), null));
+			var secDraw = new StackPanel { UseLayoutRounding = true, SnapsToDevicePixels = true };
+			SolidColorBrush clearBg = CreateFrozenBrush(Color.FromRgb(20, 20, 20));
+			Button btnClear = CreateButton("Clear", clearBg, null, 24, 10);
+			btnClear.Click += (s, e) => TriggerCustomEvent(o => ClearOldSignalDrawings(), null);
 			secDraw.Children.Add(btnClear);
 			mainPanel.Children.Add(CreateSectionCard(secDraw, 0));
 
@@ -1022,10 +1152,7 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 			StartPanelWatchdog();
 		}
 
-		// Mirrors the HUD account pick into Chart Trader's own account selector so chart order
-		// rendering follows the HUD account. Locates the selector by item content (account names),
-		// which survives NT8 template/layout changes better than hardcoded names.
-		// Pattern proven in nt8-kat-TradeManager SyncChartTraderAccount.
+		// Mirrors the HUD account pick into Chart Trader's own account selector
 		private void SyncChartTraderAccount(string accountName)
 		{
 			try
@@ -1040,9 +1167,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 					foreach (object item in combo.Items)
 					{
 						if (item == null) continue;
-						// Rithmic accounts render as "name!connection!connection" in Chart Trader's
-						// selector while Account.Name stays short — match on Name first, then on
-						// exact/prefixed ToString.
 						string itemText = item.ToString();
 						bool match = (item as Account)?.Name.Equals(accountName, StringComparison.OrdinalIgnoreCase) == true
 							|| itemText.Equals(accountName, StringComparison.OrdinalIgnoreCase)
@@ -1052,9 +1176,6 @@ namespace NinjaTrader.NinjaScript.Indicators.KAT
 							combo.SelectedItem = item;
 						return;
 					}
-				// No match: Chart Trader's account selector (NinjaTrader.Gui.Tools.AccountSelector) only
-				// lists accounts NT8 currently offers — connected-connection accounts, minus Backtest/Playback.
-				// Report what it actually lists so the gap is diagnosable.
 				var listed = new List<string>();
 				foreach (ComboBox combo in combos)
 					foreach (object item in combo.Items)

@@ -19,6 +19,16 @@ graph TD
 ---
 
 ## 📜 Version History & Change Log
+### [v0.95] — 2026-08-08
+- **HUD full redesign — TradeManager pixel-perfect port (nt8-hud-design v1.64)**: toàn bộ HUD thiết kế lại theo hệ thống TradeManager.
+  - **Tokens**: `HudGap 2` uniform (mọi gap ngang/dọc/inner/outer), `HudPanelWidth 250` → inner `238 = 22+24k` (chia hết cho 2/4/6/8 cols, không còn 0.5px drift), `UseLayoutRounding`+`SnapsToDevicePixels` trên mọi Border/StackPanel/Grid/ComboBox/Button template.
+  - **Factory**: copy verbatim `CreateButton` (TextBlock centered + `GetHudButtonTemplate` own ControlTemplate với Border bind Background/BorderBrush/Thickness, ContentPresenter centered Margin 2,0), `SetButtonLabel`, `CreateTwo/Four/Six/EightColumnGrid(HudGap)`, `CreateSectionCard` (card bg #0A0C12 border #232A38 CornerRadius 5 Padding HudGap + footer đen 6px).
+  - **Panel**: `Border` Width 250 Padding HudGap Margin HudGap CornerRadius 6 Background Argb(240,20,24,33), `mainPanel` StackPanel snapped, header `⚡ KAT 34-ScalperBot vX` Normal 12 Opacity 0.3 Margin 0,HudGap*2,0,HudGap*2.
+  - **Heights**: quick-set 22, toggle 24 (BOT ON/OFF, MaxDD/Profit, A2/B1/B2, Filter 6), exec primary 43 (SELL/BUY MARKET, BE/Revert), Close 59 — uniform trong card, không còn 26 vs 24 hay 33 vs 48 lệch 2px.
+  - **Colors**: frozen brushes `hudOn #007ACC`, `hudBotOn #0F3C82`, `hudOff #2D3241`, `atmSetOn #B45A14`/`Off #2D3241`, `dailyOn #3A136B`, `buyMkt #0C3019`/`sellMkt #370F12`, `BE/Revert #161616`, `Close #0A0A0A`, ComboBox black bg #000000 border #232A38.
+  - **Grids**: mọi row dùng helper `Create*ColumnGrid(HudGap)`, last row trong card bottomMargin 0, DailyRisk 2 nút share `CreateSixColumnGrid` với `Span5` để center 118-120 pixel-perfect.
+  - **Fix**: Border 1px integer (không 1.5), Button template bind đầy đủ, TextBlock foreground sync sau toggle, status TextBlock Background Transparent Height 16.
+  - Graphify mapping: `Kat34Scalper.Draw:BuildHud/CreateButton/GetHudButtonTemplate/CreateSectionCard/Create*Grid/SetButtonLabel/HudGap/HudPanelWidth`.
 ### [v0.94] — 2026-08-06
 - A1 separation: A1 is now a STANDALONE indicator (`KatA1TradeBackground`, NT8 menu KAT folder) owned by sibling repo `nt8-kat-A1-TradeBackground` v0.89. Host no longer compiles A1 as a partial class.
 - Host dropped A1 settings/series/EMAs/HUD toggle; ADX MTF series renumbered 2→1; StackEMA series mapping starts at 2 and reuses only the ADX MTF series.
